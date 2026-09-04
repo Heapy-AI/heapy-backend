@@ -29,3 +29,12 @@ management:
     web:
       exposure:
         include: health,info
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha

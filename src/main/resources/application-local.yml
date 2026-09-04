@@ -10,3 +10,9 @@ spring:
 logging:
   level:
     com.heapy: INFO
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true

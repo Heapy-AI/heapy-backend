@@ -16,3 +16,9 @@ heapy:
   supabase:
     url: http://localhost:54321
     anon-key: test-anon-key
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
