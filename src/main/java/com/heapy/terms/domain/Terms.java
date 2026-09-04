@@ -23,6 +23,15 @@ public class Terms {
     @Column(name = "version", nullable = false)
     private String version;
 
+    @Column(name = "title", nullable = false)
+    private String title;
+
+    @Column(name = "content_url", nullable = false)
+    private String contentUrl;
+
+    @Column(name = "content_hash", nullable = false)
+    private String contentHash;
+
     @Column(name = "is_required", nullable = false)
     private boolean required;
 
@@ -33,5 +42,37 @@ public class Terms {
     private Instant retiredAt;
 
     protected Terms() {
+    }
+
+    public Long getTermsId() {
+        return termsId;
+    }
+
+    public String getTermsCode() {
+        return termsCode;
+    }
+
+    public String getVersion() {
+        return version;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public String getContentUrl() {
+        return contentUrl;
+    }
+
+    public String getContentHash() {
+        return contentHash;
+    }
+
+    public boolean isRequired() {
+        return required;
+    }
+
+    public Instant getEffectiveAt() {
+        return effectiveAt;
     }
 }

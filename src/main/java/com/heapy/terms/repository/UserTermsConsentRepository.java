@@ -1,12 +1,24 @@
 package com.heapy.terms.repository;
 
 import com.heapy.terms.domain.UserTermsConsent;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface UserTermsConsentRepository extends JpaRepository<UserTermsConsent, Long> {
+
+    List<UserTermsConsent> findByUserIdAndTermsIdInOrderByOccurredAtDescConsentIdDesc(
+            UUID userId,
+            Collection<Long> termsIds
+    );
+
+    List<UserTermsConsent> findByUserIdAndIdempotencyKeyIn(
+            UUID userId,
+            Collection<UUID> idempotencyKeys
+    );
 
     @Query(value = """
             with current_required_terms as (

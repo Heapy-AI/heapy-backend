@@ -4,12 +4,17 @@ import com.heapy.common.response.ErrorResponse;
 import com.heapy.common.response.FieldErrorResponse;
 import com.heapy.common.web.RequestTraceFilter;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
 import java.util.List;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -19,7 +24,7 @@ public class GlobalExceptionHandler {
             HeapyException exception,
             HttpServletRequest request
     ) {
-        return buildResponse(exception.getErrorCode(), List.of(), request);
+        return buildResponse(exception.getErrorCode(), exception.getErrors(), request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -35,6 +40,20 @@ public class GlobalExceptionHandler {
                 ))
                 .toList();
         return buildResponse(ErrorCode.INVALID_INPUT, errors, request);
+    }
+
+    @ExceptionHandler({
+            ConstraintViolationException.class,
+            HandlerMethodValidationException.class,
+            MissingRequestHeaderException.class,
+            MethodArgumentTypeMismatchException.class,
+            HttpMessageNotReadableException.class
+    })
+    public ResponseEntity<ErrorResponse> handleInvalidRequest(
+            Exception exception,
+            HttpServletRequest request
+    ) {
+        return buildResponse(ErrorCode.INVALID_INPUT, List.of(), request);
     }
 
     @ExceptionHandler(Exception.class)
