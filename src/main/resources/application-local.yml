@@ -1,0 +1,12 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+  flyway:
+    enabled: ${FLYWAY_ENABLED:false}
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    com.heapy: INFO

@@ -1,0 +1,32 @@
+# 작업·참조 문서(애플리케이션 실행 로직과 무관)
+/docs/
+/Reference/
+/reference/
+/tasks/
+/requests/
+/AGENTS.md
+/*.task.md
+
+# 비밀정보와 로컬 환경설정
+.env
+.env.*
+!.env.example
+application-secret.yml
+application-*.secret.yml
+
+# 빌드 산출물
+/.gradle/
+/build/
+/out/
+
+# IDE·운영체제
+/.idea/
+/.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# 로컬 도구 상태
+/.agents/
+/.codex/
+/supabase/.backups/
