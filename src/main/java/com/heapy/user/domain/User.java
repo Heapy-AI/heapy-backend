@@ -16,7 +16,7 @@ public class User {
     private UUID userId;
 
     @Column(name = "onboarding_step", nullable = false)
-    private int onboardingStep;
+    private short onboardingStep;
 
     @Column(name = "onboarding_completed_at")
     private Instant onboardingCompletedAt;
