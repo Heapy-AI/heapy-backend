@@ -8,7 +8,7 @@ on:
         required: true
         default: inspect
         type: choice
-        options: [inspect, bootstrap, activate, repair]
+        options: [inspect, bootstrap, activate, repair, verify-renewal]
       diagnostic_command_id:
         description: 선택 사항 - 이전 HEAPY 배포 명령의 상태 확인용 UUID
         required: false

@@ -6,7 +6,7 @@ TARGET=/opt/heapy/https
 source "$SOURCE/images.sh"
 [[ $EUID == 0 ]] || exit 1
 MODE=${1:?inspect, bootstrap 또는 activate 필요}
-[[ $MODE == inspect || $MODE == bootstrap || $MODE == activate || $MODE == repair ]] || exit 1
+[[ $MODE == inspect || $MODE == bootstrap || $MODE == activate || $MODE == repair || $MODE == verify-renewal ]] || exit 1
 
 verify_instance() {
     local token instance public_ip
@@ -43,6 +43,15 @@ if [[ $MODE == inspect ]]; then
     ss -ltn '( sport = :80 or sport = :443 or sport = :8080 )'
     if [[ -d $TARGET ]]; then echo 'HTTPS 작업 디렉터리 존재'; else echo 'HTTPS 작업 디렉터리 없음'; fi
     if [[ -e /etc/letsencrypt/live/heapy-ip/cert.pem ]]; then echo 'IP 인증서 존재'; else echo 'IP 인증서 없음'; fi
+    exit 0
+fi
+
+if [[ $MODE == verify-renewal ]]; then
+    [[ $(docker inspect --format '{{index .Config.Labels "com.heapy.component"}}' heapy-https) == https ]] || exit 1
+    systemctl is-active --quiet heapy-certbot-renew.timer
+    systemctl is-enabled --quiet heapy-certbot-renew.timer
+    bash "$TARGET/renew-certificate.sh" --dry-run
+    echo '자동 갱신 타이머 및 시험 갱신 확인 완료.'
     exit 0
 fi
 

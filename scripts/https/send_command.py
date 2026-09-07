@@ -16,7 +16,7 @@ FILES = (
 
 
 def parameters(mode):
-    if mode not in {"inspect", "bootstrap", "activate", "repair"}:
+    if mode not in {"inspect", "bootstrap", "activate", "repair", "verify-renewal"}:
         raise ValueError("허용되지 않은 HTTPS 작업입니다.")
     commands = ["set -eu", "umask 077", "setup_dir=$(mktemp -d /run/heapy-https.XXXXXX)"]
     targets = " ".join(f'"$setup_dir/{name}"' for name in FILES)

@@ -40,7 +40,7 @@ class HttpsTest(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("https_sender", ROOT / "send_command.py")
         sender = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(sender)
-        for mode in ("inspect", "bootstrap", "activate", "repair"):
+        for mode in ("inspect", "bootstrap", "activate", "repair", "verify-renewal"):
             params = sender.parameters(mode)
             self.assertTrue(params["commands"][-1].endswith(mode))
         for mode in ("issue", "bootstrap;id", ""):
