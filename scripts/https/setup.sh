@@ -35,6 +35,9 @@ if [[ $MODE == inspect ]]; then
     command -v docker curl openssl ss
     docker ps --format '{{.Names}} {{.Ports}}'
     docker ps -a --filter name=heapy --format '{{.Names}} {{.Status}}'
+    if docker container inspect heapy-https >/dev/null 2>&1; then
+        docker logs --tail 8 heapy-https 2>&1 | sed -n '/\[emerg\]/p'
+    fi
     printf '백엔드 헬스 HTTP 상태: '
     curl --silent --max-time 5 -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/actuator/health || true
     ss -ltn '( sport = :80 or sport = :443 or sport = :8080 )'
