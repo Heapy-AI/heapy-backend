@@ -18,6 +18,21 @@ jobs:
     name: 테스트 및 이미지 빌드 검증
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_DB: heapy_test
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      HEAPY_TEST_POSTGRES_URL: jdbc:postgresql://localhost:5432/heapy_test
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

@@ -15,9 +15,33 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<ErrorResponse> handleNotFound(Exception exception, HttpServletRequest request) {
+        return buildResponse(ErrorCode.RESOURCE_NOT_FOUND, List.of(), request);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotAllowed(
+            HttpRequestMethodNotSupportedException exception, HttpServletRequest request) {
+        return buildResponse(ErrorCode.METHOD_NOT_ALLOWED, List.of(), request);
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleUnsupportedMediaType(
+            HttpMediaTypeNotSupportedException exception, HttpServletRequest request) {
+        return buildResponse(ErrorCode.UNSUPPORTED_MEDIA_TYPE, List.of(), request);
+    }
 
     @ExceptionHandler(HeapyException.class)
     public ResponseEntity<ErrorResponse> handleHeapyException(
@@ -61,6 +85,9 @@ public class GlobalExceptionHandler {
             Exception exception,
             HttpServletRequest request
     ) {
+        // 작성자: 김진우 — 예외 메시지에는 SQL·건강정보가 포함될 수 있어 유형과 추적 ID만 기록한다.
+        log.error("요청 처리 실패: traceId={}, exceptionType={}",
+                RequestTraceFilter.getTraceId(request), exception.getClass().getName());
         return buildResponse(ErrorCode.INTERNAL_SERVER_ERROR, List.of(), request);
     }
 
