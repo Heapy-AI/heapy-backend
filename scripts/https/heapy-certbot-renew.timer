@@ -1,0 +1,11 @@
+# 작성자: 김진우
+[Unit]
+Description=HEAPY 인증서 갱신을 4시간마다 확인
+
+[Timer]
+OnCalendar=*-*-* 00/4:00:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

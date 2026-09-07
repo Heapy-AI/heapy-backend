@@ -1,0 +1,11 @@
+# 작성자: 김진우
+[Unit]
+Description=HEAPY IP 인증서 갱신과 Nginx 재적용
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/heapy/https/renew-certificate.sh
+TimeoutStartSec=15min

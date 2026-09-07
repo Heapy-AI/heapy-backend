@@ -1,0 +1,51 @@
+name: 개발 서버 HTTPS 설정
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 조회 / 인증서 발급 준비 / 발급 후 HTTPS 활성화
+        required: true
+        default: inspect
+        type: choice
+        options: [inspect, bootstrap, activate]
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    if: github.repository == 'Heapy-AI/heapy-backend' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    concurrency:
+      group: heapy-backend-dev-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      HTTPS_MODE: ${{ inputs.mode }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: 대상 및 설정 파일 검증
+        run: |
+          test "$EC2_INSTANCE_ID" = i-055b8632e5b93fd96
+          test "$AWS_REGION" = ap-northeast-2
+          test "$AWS_ROLE_ARN" = arn:aws:iam::577638373354:role/heapy-backend-github-role
+          for file in scripts/https/*.sh; do bash -n "$file"; done
+          python3 -m unittest discover -s scripts/https/tests -v
+      - name: AWS 단기 인증
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          allowed-account-ids: '577638373354'
+          role-session-name: heapy-https-${{ github.run_id }}
+      - name: HTTPS 설정 작업 실행
+        run: python3 scripts/https/send_command.py

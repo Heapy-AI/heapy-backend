@@ -5,6 +5,9 @@ on:
     branches: [dev, main]
   push:
     branches: [dev, main]
+    paths-ignore:
+      - 'scripts/https/**'
+      - '.github/workflows/https.yml'
   workflow_dispatch:
 
 permissions:
