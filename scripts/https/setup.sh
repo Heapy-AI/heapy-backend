@@ -6,7 +6,7 @@ TARGET=/opt/heapy/https
 source "$SOURCE/images.sh"
 [[ $EUID == 0 ]] || exit 1
 MODE=${1:?inspect, bootstrap 또는 activate 필요}
-[[ $MODE == inspect || $MODE == bootstrap || $MODE == activate ]] || exit 1
+[[ $MODE == inspect || $MODE == bootstrap || $MODE == activate || $MODE == repair ]] || exit 1
 
 verify_instance() {
     local token instance public_ip
@@ -43,6 +43,23 @@ if [[ $MODE == inspect ]]; then
     ss -ltn '( sport = :80 or sport = :443 or sport = :8080 )'
     if [[ -d $TARGET ]]; then echo 'HTTPS 작업 디렉터리 존재'; else echo 'HTTPS 작업 디렉터리 없음'; fi
     if [[ -e /etc/letsencrypt/live/heapy-ip/cert.pem ]]; then echo 'IP 인증서 존재'; else echo 'IP 인증서 없음'; fi
+    exit 0
+fi
+
+if [[ $MODE == repair ]]; then
+    # 인증서 발급 전, 이 스크립트가 만든 HTTP 설정에만 임시 경로 수정 적용.
+    [[ $(docker inspect --format '{{index .Config.Labels "com.heapy.component"}}' heapy-https) == https ]] || exit 1
+    [[ ! -e /etc/letsencrypt/live/heapy-ip/cert.pem ]] || exit 1
+    diff -q "$TARGET/nginx.conf" <(sed '/fastcgi_temp_path/d; /uwsgi_temp_path/d; /scgi_temp_path/d' "$SOURCE/nginx-http.conf")
+    install -m 644 "$TARGET/nginx.conf" "$TARGET/nginx.before-repair.conf"
+    install -m 644 "$SOURCE/nginx-http.conf" "$TARGET/nginx.conf"
+    install -m 644 "$SOURCE/nginx-https.conf" "$TARGET/nginx-https.conf"
+    docker restart heapy-https >/dev/null
+    curl -fsS --retry 5 --retry-connrefused --retry-delay 1 http://127.0.0.1/.well-known/acme-challenge/heapy-probe
+    docker exec heapy-https nginx -c /etc/heapy/nginx.conf -t
+    [[ $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/api/users/me) == 404 ]]
+    systemctl daemon-reload
+    echo '인증서 발급 전 HTTP 설정 복구 완료.'
     exit 0
 fi
 

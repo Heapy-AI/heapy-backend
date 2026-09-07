@@ -40,12 +40,18 @@ class HttpsTest(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("https_sender", ROOT / "send_command.py")
         sender = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(sender)
-        for mode in ("inspect", "bootstrap", "activate"):
+        for mode in ("inspect", "bootstrap", "activate", "repair"):
             params = sender.parameters(mode)
             self.assertTrue(params["commands"][-1].endswith(mode))
         for mode in ("issue", "bootstrap;id", ""):
             with self.assertRaises(ValueError):
                 sender.parameters(mode)
+
+    def test_all_nginx_temporary_paths_use_writable_tmp(self):
+        for name in ("nginx-http.conf", "nginx-https.conf"):
+            content = (ROOT / name).read_text(encoding="utf-8")
+            for module in ("proxy", "fastcgi", "uwsgi", "scgi"):
+                self.assertIn(f"{module}_temp_path /tmp/{module}_temp;", content)
 
 
 if __name__ == "__main__":
