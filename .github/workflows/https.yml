@@ -9,6 +9,10 @@ on:
         default: inspect
         type: choice
         options: [inspect, bootstrap, activate]
+      diagnostic_command_id:
+        description: 선택 사항 - 이전 HEAPY 배포 명령의 상태 확인용 UUID
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -26,6 +30,7 @@ jobs:
       id-token: write
     env:
       HTTPS_MODE: ${{ inputs.mode }}
+      DIAGNOSTIC_COMMAND_ID: ${{ inputs.diagnostic_command_id }}
       EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
       AWS_REGION: ${{ vars.AWS_REGION }}
       AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}

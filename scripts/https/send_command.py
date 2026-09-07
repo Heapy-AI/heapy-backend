@@ -3,6 +3,7 @@
 import base64
 import json
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -59,6 +60,22 @@ def main():
             # inspect는 포트·컨테이너 이름·파일 존재 여부만 출력한다.
             if mode == "inspect":
                 print(result.get("StandardOutputContent", ""))
+                diagnostic_id = os.environ.get("DIAGNOSTIC_COMMAND_ID", "")
+                if diagnostic_id:
+                    if not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", diagnostic_id):
+                        raise ValueError("잘못된 진단 명령 ID입니다.")
+                    previous = aws("ssm", "get-command-invocation", "--instance-id", instance, "--command-id", diagnostic_id)
+                    print("이전 배포 상태:", previous["Status"])
+                    # 환경 값을 출력하지 않는 HEAPY 배포 스크립트의 알려진 오류만 추린다.
+                    for line in (previous.get("StandardOutputContent", "") + "\n" + previous.get("StandardErrorContent", "")).splitlines():
+                        if any(message in line for message in (
+                            "새 버전 배포 실패", "이전 컨테이너 복원", "최초 배포 실패",
+                            "환경 파일", "docker: Error", "Error response from daemon",
+                            "permission denied", "Permission denied", "unbound variable",
+                            "nginx:", "curl:", "manifest unknown", "not found", "Error:",
+                            "failed", "Failed", "실패", "중단", "존재합니다",
+                        )):
+                            print(line[:500])
             print("HTTPS 작업 성공:", mode)
             return
         if status not in {"Pending", "InProgress", "Delayed", "Cancelling"}:

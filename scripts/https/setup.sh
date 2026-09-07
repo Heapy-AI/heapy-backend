@@ -34,6 +34,9 @@ flock -n 8 || { echo 'HTTPS 설정 작업이 실행 중입니다.' >&2; exit 1; 
 if [[ $MODE == inspect ]]; then
     command -v docker curl openssl ss
     docker ps --format '{{.Names}} {{.Ports}}'
+    docker ps -a --filter name=heapy --format '{{.Names}} {{.Status}}'
+    printf '백엔드 헬스 HTTP 상태: '
+    curl --silent --max-time 5 -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/actuator/health || true
     ss -ltn '( sport = :80 or sport = :443 or sport = :8080 )'
     if [[ -d $TARGET ]]; then echo 'HTTPS 작업 디렉터리 존재'; else echo 'HTTPS 작업 디렉터리 없음'; fi
     if [[ -e /etc/letsencrypt/live/heapy-ip/cert.pem ]]; then echo 'IP 인증서 존재'; else echo 'IP 인증서 없음'; fi
