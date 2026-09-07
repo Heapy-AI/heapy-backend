@@ -28,7 +28,7 @@ jobs:
           bash -n scripts/deploy/deploy.sh
           python3 -m unittest discover -s scripts/deploy/tests -v
       - name: 애플리케이션 테스트 및 실행 JAR 생성
-        run: bash gradlew --no-daemon clean test bootJar
+        run: bash ./gradlew --no-daemon clean test bootJar
       - name: 컨테이너 빌드 검증
         run: docker build --platform linux/amd64 -t heapy-backend-verify .
 
@@ -69,7 +69,7 @@ jobs:
           java-version: '21'
       - name: 검증된 커밋의 이미지 생성
         run: |
-          bash gradlew --no-daemon clean bootJar
+          bash ./gradlew --no-daemon clean bootJar
           docker build --platform linux/amd64 -t "heapy-backend:$IMAGE_TAG" .
       - name: AWS 단기 인증
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
