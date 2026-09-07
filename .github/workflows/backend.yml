@@ -1,0 +1,93 @@
+name: 백엔드 검증 및 개발 배포
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: 테스트 및 이미지 빌드 검증
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: 배포 도구 검증
+        run: |
+          bash -n scripts/deploy/deploy.sh
+          python3 -m unittest discover -s scripts/deploy/tests -v
+      - name: 애플리케이션 테스트 및 실행 JAR 생성
+        run: bash gradlew --no-daemon clean test bootJar
+      - name: 컨테이너 빌드 검증
+        run: docker build --platform linux/amd64 -t heapy-backend-verify .
+
+  deploy:
+    name: 개발 EC2 배포
+    needs: verify
+    if: github.repository == 'Heapy-AI/heapy-backend' && github.ref == 'refs/heads/dev' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    # 작성자: 김진우 — 진행 중 배포를 취소하지 않고 다음 배포를 대기시킨다.
+    concurrency:
+      group: heapy-backend-dev-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: 승인된 배포 대상 확인
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$AWS_REGION" = ap-northeast-2
+          test "$AWS_ROLE_ARN" = arn:aws:iam::577638373354:role/heapy-backend-dev-github-role
+          test "$ECR_REPOSITORY" = heapy-backend
+          test "$EC2_INSTANCE_ID" = i-055b8632e5b93fd96
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: 검증된 커밋의 이미지 생성
+        run: |
+          bash gradlew --no-daemon clean bootJar
+          docker build --platform linux/amd64 -t "heapy-backend:$IMAGE_TAG" .
+      - name: AWS 단기 인증
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          allowed-account-ids: '577638373354'
+          role-session-name: heapy-backend-${{ github.run_id }}
+      - name: 이미지 업로드 및 다이제스트 확정
+        shell: bash
+        run: |
+          set -euo pipefail
+          registry="577638373354.dkr.ecr.$AWS_REGION.amazonaws.com"
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$registry"
+          docker tag "heapy-backend:$IMAGE_TAG" "$registry/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$registry/$ECR_REPOSITORY:$IMAGE_TAG"
+          digest=$(aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids "imageTag=$IMAGE_TAG" --query 'imageDetails[0].imageDigest' --output text)
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "DEPLOY_IMAGE=$registry/$ECR_REPOSITORY@$digest" >> "$GITHUB_ENV"
+      - name: EC2 배포 및 결과 확인
+        run: python3 scripts/deploy/send_command.py
