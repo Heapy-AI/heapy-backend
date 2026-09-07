@@ -5,11 +5,15 @@ import com.heapy.user.domain.User;
 import com.heapy.user.repository.UserRepository;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OnboardingDecisionService {
+
+    @Value("${heapy.onboarding.require-consents:true}")
+    private boolean requireConsents = true;
 
     private final UserRepository userRepository;
     private final UserTermsConsentRepository consentRepository;
@@ -26,7 +30,7 @@ public class OnboardingDecisionService {
     public OnboardingDecision decide(UUID userId) {
         Optional<User> user = userRepository.findById(userId);
         int onboardingStep = user.map(User::getOnboardingStep).orElse(1);
-        if (consentRepository.countMissingCurrentRequiredConsents(userId) > 0) {
+        if (requireConsents && consentRepository.countMissingCurrentRequiredConsents(userId) > 0) {
             return new OnboardingDecision(NextStep.TERMS, onboardingStep);
         }
         if (user.isEmpty() || user.get().getOnboardingCompletedAt() == null) {

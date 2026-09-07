@@ -8,6 +8,8 @@ public enum ErrorCode {
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "AUTH-001", "이메일 또는 비밀번호를 확인해 주세요."),
     EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN, "AUTH-002", "이메일 인증이 필요합니다."),
     INVALID_ACCESS_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH-003", "인증 정보가 올바르지 않습니다."),
+    EMAIL_ALREADY_REGISTERED(HttpStatus.CONFLICT, "AUTH-005", "회원가입을 진행할 수 없습니다. 로그인 또는 비밀번호 재설정을 이용해 주세요."),
+    PASSWORD_POLICY_VIOLATION(HttpStatus.UNPROCESSABLE_CONTENT, "AUTH-006", "비밀번호 정책을 충족하지 않습니다."),
     AUTH_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "AUTH-008", "잠시 후 다시 시도해 주세요."),
     AUTH_PROVIDER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AUTH-009", "인증 서비스에 일시적인 문제가 발생했습니다."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", "요청한 리소스를 찾을 수 없습니다."),

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.heapy.terms.repository.UserTermsConsentRepository;
 import com.heapy.user.domain.User;
@@ -13,6 +14,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -65,6 +67,17 @@ class OnboardingDecisionServiceTest {
         assertThat(service.decide(USER_ID).nextStep()).isEqualTo(NextStep.HOME);
     }
 
+    @Test
+    void 개발용_약관_생략은_프로필_완료_여부로_진입한다() {
+        ReflectionTestUtils.setField(service, "requireConsents", false);
+        User incompleteUser = user(1, null);
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(incompleteUser));
+        assertThat(service.decide(USER_ID).nextStep()).isEqualTo(NextStep.PROFILE);
+        User completeUser = user(6, Instant.now());
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(completeUser));
+        assertThat(service.decide(USER_ID).nextStep()).isEqualTo(NextStep.HOME);
+        verifyNoInteractions(consentRepository);
+    }
     private User user(int onboardingStep, Instant completedAt) {
         User user = mock(User.class);
         lenient().when(user.getOnboardingStep()).thenReturn(onboardingStep);

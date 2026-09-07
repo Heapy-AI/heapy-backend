@@ -16,3 +16,7 @@ springdoc:
     enabled: true
   swagger-ui:
     enabled: true
+
+heapy:
+  onboarding:
+    require-consents: false

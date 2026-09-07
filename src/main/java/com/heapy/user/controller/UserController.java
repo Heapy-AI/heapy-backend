@@ -3,6 +3,7 @@ package com.heapy.user.controller;
 import com.heapy.common.response.ApiResponse;
 import com.heapy.security.AuthenticatedUser;
 import com.heapy.user.dto.OnboardingCompleteResponse;
+import com.heapy.user.dto.CompleteProfileRequest;
 import com.heapy.user.dto.UpdateProfileRequest;
 import com.heapy.user.dto.UserProfileResponse;
 import com.heapy.user.service.UserProfileService;
@@ -56,14 +57,15 @@ public class UserController {
     }
 
     @PostMapping("/onboarding/complete")
-    @Operation(summary = "온보딩 필수값 검증 및 완료 확정")
+    @Operation(summary = "전체 프로필 일괄 저장 및 온보딩 완료", description = "앱 메모리에 보관한 전체 프로필을 한 번에 전송합니다. 프로필·완료 상태·홈 모듈을 같은 트랜잭션으로 저장합니다.")
     public ResponseEntity<ApiResponse<OnboardingCompleteResponse>> completeOnboarding(
             @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody CompleteProfileRequest request,
             @RequestHeader("Idempotency-Key") @NotBlank String idempotencyKey
     ) {
-        OnboardingCompleteResponse response = userProfileService.completeOnboarding(
+        OnboardingCompleteResponse response = userProfileService.submitOnboarding(
                 AuthenticatedUser.id(jwt),
-                idempotencyKey
+                idempotencyKey, request
         );
         return ResponseEntity.ok(ApiResponse.success(response, "프로필 설정을 완료했습니다."));
     }

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,6 +24,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class UserProfileServiceTest {
 
@@ -87,6 +89,16 @@ class UserProfileServiceTest {
                 );
     }
 
+    @Test
+    void 개발용_약관_생략은_동의_기록_없이_완료한다() {
+        ReflectionTestUtils.setField(service, "requireConsents", false);
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(completedProfileUser()));
+        OnboardingCompleteResponse response = service.completeOnboarding(
+                USER_ID, "4e0a13ec-6ba2-4d72-b2a4-c621f9f0bc9b"
+        );
+        assertThat(response.nextStep()).isEqualTo("home");
+        verifyNoInteractions(consentRepository);
+    }
     private User completedProfileUser() {
         User user = new User(USER_ID, new ObjectMapper().createArrayNode(), Instant.now());
         user.updateName("김히피");

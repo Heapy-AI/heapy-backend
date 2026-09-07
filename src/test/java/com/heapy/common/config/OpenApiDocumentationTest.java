@@ -34,6 +34,7 @@ class OpenApiDocumentationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("HEAPY Backend API"))
                 .andExpect(jsonPath("$.paths['/api/auth/login'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/auth/signup'].post.responses['201']").exists())
                 .andExpect(jsonPath("$.paths['/api/terms'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/users/me'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/users/me/profile'].patch").exists())

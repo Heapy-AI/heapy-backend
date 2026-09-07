@@ -12,6 +12,7 @@ import com.heapy.home.repository.UserHomeModuleRepository;
 import com.heapy.terms.repository.UserTermsConsentRepository;
 import com.heapy.user.domain.User;
 import com.heapy.user.dto.OnboardingCompleteResponse;
+import com.heapy.user.dto.CompleteProfileRequest;
 import com.heapy.user.dto.ProfileOptionRequest;
 import com.heapy.user.dto.ProfileOptionResponse;
 import com.heapy.user.dto.UpdateProfileRequest;
@@ -21,6 +22,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +35,9 @@ public class UserProfileService {
             "medication",
             "missions"
     );
+
+    @Value("${heapy.onboarding.require-consents:true}")
+    private boolean requireConsents = true;
 
     private final UserRepository userRepository;
     private final UserTermsConsentRepository consentRepository;
@@ -59,7 +64,8 @@ public class UserProfileService {
 
     @Transactional
     public UserProfileResponse getProfile(UUID userId) {
-        return toResponse(ensureUser(userId));
+        return toResponse(userRepository.findById(userId)
+                .orElseThrow(() -> new HeapyException(ErrorCode.INVALID_ACCESS_TOKEN)));
     }
 
     @Transactional
@@ -84,7 +90,7 @@ public class UserProfileService {
         }
 
         List<FieldErrorResponse> missingFields = missingRequiredFields(user);
-        if (consentRepository.countMissingCurrentRequiredConsents(userId) > 0) {
+        if (requireConsents && consentRepository.countMissingCurrentRequiredConsents(userId) > 0) {
             missingFields.add(new FieldErrorResponse(
                     "requiredConsents",
                     null,
@@ -100,6 +106,23 @@ public class UserProfileService {
         userRepository.save(user);
         ensureDefaultHomeModules(userId, completedAt);
         return completionResponse(user);
+    }
+
+    @Transactional
+    public OnboardingCompleteResponse submitOnboarding(
+            UUID userId, String idempotencyKey, CompleteProfileRequest request) {
+        validateIdempotencyKey(idempotencyKey);
+        User user = userRepository.findForUpdate(userId)
+                .orElseThrow(() -> new HeapyException(ErrorCode.INVALID_ACCESS_TOKEN));
+        if (user.getOnboardingCompletedAt() != null) {
+            return completionResponse(user);
+        }
+        request.setOnboardingStep(6);
+        request.setChronicConditions(request.getChronicConditions());
+        request.setAllergies(request.getAllergies());
+        request.setHealthCautions(request.getHealthCautions());
+        applyUpdates(user, request);
+        return completeOnboarding(userId, idempotencyKey);
     }
 
     private void applyUpdates(User user, UpdateProfileRequest request) {

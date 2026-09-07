@@ -18,11 +18,13 @@ spring:
           issuer-uri: ${SUPABASE_JWT_ISSUER:http://localhost:54321/auth/v1}
           jwk-set-uri: ${SUPABASE_JWK_SET_URI:http://localhost:54321/auth/v1/.well-known/jwks.json}
           audiences: ${SUPABASE_JWT_AUDIENCE:authenticated}
+          jws-algorithms: ES256
 
 heapy:
   supabase:
     url: ${SUPABASE_URL:http://localhost:54321}
     anon-key: ${SUPABASE_ANON_KEY:local-anon-key}
+    signup-redirect-url: ${SUPABASE_SIGNUP_REDIRECT_URL:heapy://auth/callback}
 
 management:
   endpoints:
