@@ -21,10 +21,18 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleUploadLimit(Exception exception, HttpServletRequest request) {
+        return buildResponse(ErrorCode.OCR_FILE_LIMIT, List.of(), request);
+    }
 
     @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
     public ResponseEntity<ErrorResponse> handleNotFound(Exception exception, HttpServletRequest request) {
@@ -59,11 +67,13 @@ public class GlobalExceptionHandler {
         List<FieldErrorResponse> errors = exception.getBindingResult().getFieldErrors().stream()
                 .map(error -> new FieldErrorResponse(
                         error.getField(),
-                        redactRejectedValue(error.getField(), error.getRejectedValue()),
+                        request.getRequestURI().startsWith("/api/checkups") ? "[REDACTED]"
+                                : redactRejectedValue(error.getField(), error.getRejectedValue()),
                         error.getDefaultMessage()
                 ))
                 .toList();
-        return buildResponse(ErrorCode.INVALID_INPUT, errors, request);
+        return buildResponse(request.getRequestURI().startsWith("/api/checkups/")
+                ? ErrorCode.OCR_INVALID_RESULT : ErrorCode.INVALID_INPUT, errors, request);
     }
 
     @ExceptionHandler({
@@ -71,7 +81,9 @@ public class GlobalExceptionHandler {
             HandlerMethodValidationException.class,
             MissingRequestHeaderException.class,
             MethodArgumentTypeMismatchException.class,
-            HttpMessageNotReadableException.class
+            HttpMessageNotReadableException.class,
+            MissingServletRequestPartException.class,
+            MissingServletRequestParameterException.class
     })
     public ResponseEntity<ErrorResponse> handleInvalidRequest(
             Exception exception,

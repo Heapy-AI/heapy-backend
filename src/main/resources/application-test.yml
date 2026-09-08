@@ -13,6 +13,8 @@ spring:
     enabled: false
 
 heapy:
+  ocr:
+    enabled: false
   supabase:
     url: http://localhost:54321
     anon-key: test-anon-key

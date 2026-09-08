@@ -3,6 +3,12 @@ package com.heapy.common.exception;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
+    OCR_FILE_LIMIT(HttpStatus.PAYLOAD_TOO_LARGE, "OCR-001", "파일은 20MB 이하, PDF는 20페이지 이하로 등록해 주세요."),
+    OCR_UNSUPPORTED_FILE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "OCR-002", "비밀번호가 없는 PDF 또는 JPG, PNG 파일을 등록해 주세요."),
+    OCR_EXPIRED(HttpStatus.GONE, "OCR-003", "OCR 작업이 만료되었거나 종료됐습니다. 파일을 다시 등록해 주세요."),
+    OCR_ALREADY_CONFIRMED(HttpStatus.CONFLICT, "OCR-004", "이미 확정했거나 중복된 검진 결과입니다."),
+    OCR_INVALID_RESULT(HttpStatus.UNPROCESSABLE_CONTENT, "OCR-005", "검진일, 검사 항목과 수정 내용을 확인해 주세요."),
+    OCR_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI-001", "OCR 서비스에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요."),
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "COMMON-001", "입력값이 올바르지 않습니다."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED", "지원하지 않는 요청 방식입니다."),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE", "지원하지 않는 요청 형식입니다."),

@@ -1,4 +1,8 @@
 spring:
+  servlet:
+    multipart:
+      max-file-size: 20000000B
+      max-request-size: 21000000B
   application:
     name: heapy-backend
   datasource:
@@ -21,6 +25,12 @@ spring:
           jws-algorithms: ES256
 
 heapy:
+  ocr:
+    enabled: ${OCR_ENABLED:true}
+    region: ${OCR_REGION:ap-northeast-2}
+    account-id: ${OCR_ACCOUNT_ID:577638373354}
+    bucket: ${OCR_BUCKET:heapy-ocr-dev-runtime-bucket-gaxs20bnat6n}
+    worker-arn: ${OCR_WORKER_ARN:arn:aws:lambda:ap-northeast-2:577638373354:function:heapy-ocr-dev-runtime-Worker-BRv8BzBzvAaB:live}
   supabase:
     url: ${SUPABASE_URL:http://localhost:54321}
     anon-key: ${SUPABASE_ANON_KEY:local-anon-key}
