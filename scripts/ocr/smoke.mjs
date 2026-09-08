@@ -73,8 +73,12 @@ try {
   }
   check(current?.status === 'completed' && current.result?.items?.length >= 4, '실제 OCR 완료 및 검진 항목 인식');
   const original = current.result;
-  const glucose = original.items.find(item => item.itemCode === 'FASTING_GLUCOSE');
-  check(glucose && Number(glucose.value) === 95, '합성 공복혈당 95 인식');
+  // 합성 PDF 해시를 위에서 검증했으므로 이 항목들은 실제 사용자 건강 정보가 아니다.
+  console.log('합성 항목 매핑:', JSON.stringify(original.items.map(item => ({ code: item.itemCode, name: item.itemName, value: item.value }))));
+  const glucose = original.items.find(item => item.itemCode === 'FASTING_GLUCOSE' || item.itemName === 'Fasting blood glucose');
+  check(glucose && Number(glucose.value) === 95, '합성 공복혈당 원문 95 인식');
+  const correctedItem = original.items.find(item => item.itemCode === 'HEMOGLOBIN');
+  check(correctedItem && Number(correctedItem.value) === 14, '합성 혈색소 14 및 마스터 코드 연결');
   const corrections = [];
   const seen = new Set();
   const results = [];
@@ -85,7 +89,7 @@ try {
       continue;
     }
     seen.add(item.itemCode);
-    const value = item === glucose ? '96' : item.value;
+    const value = item === correctedItem ? '15' : item.value;
     if (value !== item.value) corrections.push({ fieldKey: item.fieldKey + '.value', itemCode: item.itemCode,
       originalValue: item.value, correctedValue: value, correctionType: 'value' });
     results.push({ itemCode: item.itemCode, value,
