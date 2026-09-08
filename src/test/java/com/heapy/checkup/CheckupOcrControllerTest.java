@@ -20,6 +20,7 @@ import org.springframework.web.bind.support.WebDataBinderFactory;
 import org.springframework.web.context.request.NativeWebRequest;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.method.support.ModelAndViewContainer;
+import tools.jackson.databind.node.ObjectNode;
 
 class CheckupOcrControllerTest {
     private OcrService service;
@@ -29,7 +30,7 @@ class CheckupOcrControllerTest {
     void 준비() {
         service = mock(OcrService.class);
         mvc = MockMvcBuilders.standaloneSetup(new CheckupOcrController(service))
-                .setControllerAdvice(new GlobalExceptionHandler())
+                .setControllerAdvice(new GlobalExceptionHandler(), new OcrPayloadAdvice())
                 .setCustomArgumentResolvers(new HandlerMethodArgumentResolver() {
                     public boolean supportsParameter(MethodParameter parameter) { return parameter.getParameterType() == Jwt.class; }
                     public Object resolveArgument(MethodParameter parameter, ModelAndViewContainer container,
@@ -58,6 +59,26 @@ class CheckupOcrControllerTest {
         mvc.perform(post("/api/checkups/ocr-jobs/" + UUID.randomUUID() + "/confirm")
                 .header("Idempotency-Key", UUID.randomUUID()).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.errors[0].value").value("[REDACTED]"));
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void 전체바이트제한은_역직렬화_전에_검증한다() throws Exception {
+        String body = "{\"measuredAt\":\"2026-08-12\",\"providerName\":\"" + "가".repeat(90000) + "\"}";
+        mvc.perform(post("/api/checkups/ocr-jobs/" + UUID.randomUUID() + "/confirm")
+                .header("Idempotency-Key", UUID.randomUUID()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isPayloadTooLarge()).andExpect(jsonPath("$.code").value("OCR-007"));
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void 소견의_허용목록밖_원본경로는_거절한다() throws Exception {
+        var finding = (ObjectNode) OcrJson.MAPPER.valueToTree(OcrReviewValidatorTest.finding());
+        finding.put("sourcePath", "합성 금지 경로");
+        String body = "{\"measuredAt\":\"2026-08-12\",\"reviewVersion\":2,\"findings\":[" + OcrJson.encode(finding) + "]}";
+        mvc.perform(post("/api/checkups/ocr-jobs/" + UUID.randomUUID() + "/confirm")
+                .header("Idempotency-Key", UUID.randomUUID()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("COMMON-001"));
         verifyNoInteractions(service);
     }
 }

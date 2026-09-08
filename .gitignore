@@ -30,6 +30,7 @@ Thumbs.db
 /.agents/
 /.codex/
 /supabase/.backups/
+/supabase/.temp/
 __pycache__/
 *.pyc
 /.github/modernize/

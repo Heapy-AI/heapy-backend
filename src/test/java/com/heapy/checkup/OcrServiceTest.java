@@ -16,6 +16,8 @@ import com.heapy.checkup.OcrModels.Correction;
 import com.heapy.checkup.OcrModels.Job;
 import com.heapy.checkup.OcrModels.Result;
 import com.heapy.checkup.OcrModels.Snapshot;
+import com.heapy.checkup.OcrModels.Confirmed;
+import com.heapy.checkup.OcrModels.Finding;
 import com.heapy.common.exception.ErrorCode;
 import com.heapy.common.exception.HeapyException;
 import com.zaxxer.hikari.HikariDataSource;
@@ -32,6 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.mock.web.MockMultipartFile;
@@ -80,7 +83,10 @@ class OcrServiceTest {
                   cleanup_pending boolean default false,cleanup_attempts integer default 0,
                   cleanup_retry_at timestamp with time zone default current_timestamp,primary key(user_id,operation,request_key))
                 """);
-        jdbc.execute("create table if not exists public.master_checkup_item(item_code text primary key,is_active boolean)");
+        jdbc.execute("""
+                create table if not exists public.master_checkup_item(item_code text primary key,is_active boolean,
+                value_type text default 'numeric',item_name text default '합성 검사',display_order smallint default 0)
+                """);
         jdbc.execute("""
                 create table if not exists public.health_checkup_records(record_id uuid primary key,
                   user_id uuid references public.users on delete cascade,measured_at date,provider_name text,
@@ -100,7 +106,14 @@ class OcrServiceTest {
                 """);
         jdbc.update("insert into public.users(user_id) values (?),(?)", user, other);
         if (jdbc.queryForObject("select count(*) from public.master_checkup_item where item_code='FASTING_GLUCOSE'", Integer.class) == 0)
-            jdbc.update("insert into public.master_checkup_item values ('FASTING_GLUCOSE',true)");
+            jdbc.update("insert into public.master_checkup_item(item_code,is_active) values ('FASTING_GLUCOSE',true)");
+        // 작성자: 김진우 — H2는 JSONB 문자열 바인딩 의미가 달라 저장 무결성 테스트는 PostgreSQL에서 별도 수행한다.
+        jdbc.execute("""
+                create table if not exists public.health_checkup_findings(
+                record_id uuid references public.health_checkup_records on delete cascade,
+                finding_id uuid,classification text,display_order smallint,content jsonb,
+                primary key(record_id,finding_id))
+                """);
         repository = new OcrRepository(jdbc);
         gateway = mock(OcrGateway.class);
         doAnswer(call -> { prepared.set(call.getArgument(0)); return null; }).when(gateway).prepare(any(), any());
@@ -221,5 +234,101 @@ class OcrServiceTest {
         expectError(() -> service.upload(user, UUID.randomUUID(), "image", file("a")), ErrorCode.OCR_UNSUPPORTED_FILE);
         expectError(() -> service.upload(user, UUID.randomUUID(), "pdf",
                 new MockMultipartFile("file", new byte[20_000_001])), ErrorCode.OCR_FILE_LIMIT);
+    }
+
+    @Test
+    @EnabledIfEnvironmentVariable(named = "HEAPY_TEST_POSTGRES_URL", matches = ".+")
+    void 소견전용확정은_정리후에도_상세에남고_다른사용자는_조회할수없다() {
+        when(gateway.read(any())).thenReturn(new Snapshot("completed", 1, OcrReviewValidatorTest.snapshot(), null));
+        UUID job = service.upload(user, UUID.randomUUID(), "pdf", file("소견 전용")).jobId();
+        Confirmation body = OcrReviewValidatorTest.body(List.of(), List.of(OcrReviewValidatorTest.finding()), List.of(), List.of());
+        assertThat(service.get(user, job).result().path("findings").size()).isEqualTo(1);
+        UUID key = UUID.randomUUID();
+        var saved = service.confirm(user, job, key, body);
+        assertThat(saved.resultCount()).isZero();
+        assertThat(saved.findingCount()).isEqualTo(1);
+        jdbc.update("update public.ocr_jobs set expires_at=? where job_id=?", Timestamp.from(Instant.now().minusSeconds(1)), job);
+        assertThat(repository.detail(user, saved.recordId()).orElseThrow().findings()).containsExactly(OcrReviewValidatorTest.finding());
+        assertThat(repository.detail(other, saved.recordId())).isEmpty();
+        assertThat(service.confirm(user, job, key, body)).isEqualTo(saved);
+        service.cancel(user, job);
+        assertThat(repository.detail(user, saved.recordId()).orElseThrow().findings()).hasSize(1);
+        expectError(() -> service.confirm(user, job, UUID.randomUUID(), body), ErrorCode.OCR_ALREADY_CONFIRMED);
+    }
+
+    @Test
+    @EnabledIfEnvironmentVariable(named = "HEAPY_TEST_POSTGRES_URL", matches = ".+")
+    void 수치_정성_소견_종합소견을_원자적으로_저장하고_숫자결과를_보존한다() {
+        if (repository.itemType("HEARING_GENERAL_LEFT") == null) jdbc.update("""
+                insert into public.master_checkup_item(item_code,is_active,value_type)
+                values ('HEARING_GENERAL_LEFT',true,'text')
+                """);
+        var snapshot = OcrReviewValidatorTest.snapshot();
+        snapshot.withArray("items").add(OcrReviewValidatorTest.item("n", "FASTING_GLUCOSE", "102", "정상"));
+        snapshot.withArray("items").add(OcrReviewValidatorTest.item("q", "HEARING_GENERAL_LEFT", "정상", null));
+        Finding opinion = new Finding(1, UUID.randomUUID(), "overall_opinion", null, "종합소견", "합성 권고", null, null, null, null);
+        snapshot.withArray("overallOpinions").add(OcrJson.MAPPER.valueToTree(opinion));
+        when(gateway.read(any())).thenReturn(new Snapshot("completed", 1, snapshot, null));
+        UUID job = service.upload(user, UUID.randomUUID(), "pdf", file("혼합")).jobId();
+        var body = OcrReviewValidatorTest.body(List.of(
+                new Result("FASTING_GLUCOSE", "100", new BigDecimal("100"), null, "정상", "n"),
+                new Result("HEARING_GENERAL_LEFT", "정상", null, null, null, "q")),
+                List.of(OcrReviewValidatorTest.finding()), List.of(opinion), List.of());
+        var saved = service.confirm(user, job, UUID.randomUUID(), body);
+        var detail = repository.detail(user, saved.recordId()).orElseThrow();
+        assertThat(detail.results()).hasSize(2);
+        assertThat(detail.findings()).hasSize(1);
+        assertThat(detail.overallOpinions()).containsExactly(opinion);
+        assertThat(detail.results().stream().filter(result -> result.numericValue() != null).toList())
+                .singleElement().satisfies(result -> assertThat(result.numericValue()).isEqualByComparingTo("100"));
+    }
+
+    @Test
+    @EnabledIfEnvironmentVariable(named = "HEAPY_TEST_POSTGRES_URL", matches = ".+")
+    void 소견저장뒤_오류가나면_회차_결과_소견_로그_확정상태를_모두롤백한다() {
+        var original = OcrReviewValidatorTest.snapshot();
+        when(gateway.read(any())).thenReturn(new Snapshot("completed", 1, original, null));
+        UUID job = service.upload(user, UUID.randomUUID(), "pdf", file("롤백")).jobId();
+        var before = OcrReviewValidatorTest.finding();
+        var changed = new Finding(1, before.findingId(), before.classification(), before.examType(), before.examName(),
+                "수정한 합성 소견", before.bodySite(), before.method(), before.performedAt(), null);
+        var failingRepository = new OcrRepository(jdbc) {
+            @Override
+            public Confirmed confirm(Job target, Confirmation body, String fingerprint, List<Correction> corrections, Instant now) {
+                super.confirm(target, body, fingerprint, corrections, now);
+                throw new IllegalStateException("합성 저장 실패");
+            }
+        };
+        var failingService = new OcrService(failingRepository, gateway, new DataSourceTransactionManager(source), Clock.systemUTC(),
+                new OcrProperties(true, "ap-northeast-2", "577638373354", "fixture", "fixture"));
+        assertThatThrownBy(() -> failingService.confirm(user, job, UUID.randomUUID(),
+                OcrReviewValidatorTest.body(List.of(), List.of(changed), List.of(), List.of())))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(jdbc.queryForObject("select count(*) from public.health_checkup_records where user_id=?", Integer.class, user)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from public.ocr_correction_logs where job_id=?", Integer.class, job)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from private.checkup_ocr_requests where job_id=? and operation='confirm'", Integer.class, job)).isZero();
+        assertThat(repository.owned(user, job).orElseThrow().status()).isEqualTo("pending");
+        verify(gateway, times(0)).purge(any(), anyString());
+    }
+
+    @Test
+    void 종료된작업은_늦은완료로_되살아나지않는다() {
+        UUID job = service.upload(user, UUID.randomUUID(), "pdf", file("취소")).jobId();
+        Job before = repository.owned(user, job).orElseThrow();
+        service.cancel(user, job);
+        repository.progress(before, new Snapshot("completed", 1, OcrReviewValidatorTest.snapshot(), null), null);
+        assertThat(repository.owned(user, job).orElseThrow().status()).isEqualTo("expired");
+        expectError(() -> service.get(user, job), ErrorCode.OCR_EXPIRED);
+    }
+
+    @Test
+    void 배포전_구버전_확정영수증의_요청해시를_유지한다() {
+        UUID job = UUID.randomUUID();
+        String previousPayload = """
+                {"measuredAt":"2026-08-12","providerName":"합성 검진센터",
+                "results":[{"itemCode":"FASTING_GLUCOSE","value":"100","numericValue":100,"unit":"mg/dL","status":"정상"}],
+                "corrections":[{"fieldKey":"result-1.value","itemCode":"FASTING_GLUCOSE","originalValue":"102","correctedValue":"100","correctionType":"value"}]}
+                """;
+        assertThat(OcrService.confirmationHash(job, edited())).isEqualTo(OcrJson.hash(job + ":" + OcrJson.encode(OcrJson.MAPPER.readTree(previousPayload))));
     }
 }

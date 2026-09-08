@@ -5,7 +5,6 @@ import com.heapy.checkup.OcrModels.Correction;
 import com.heapy.checkup.OcrModels.Result;
 import com.heapy.common.exception.ErrorCode;
 import com.heapy.common.exception.HeapyException;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -24,9 +23,6 @@ public final class OcrConfirmationValidator {
         Map<String, Result> included = new HashMap<>();
         for (Result result : body.results()) {
             if (included.put(result.itemCode(), result) != null || !activeItem.test(result.itemCode())) throw invalid();
-            BigDecimal numeric = number(result.value());
-            if ((numeric == null) != (result.numericValue() == null)
-                    || numeric != null && numeric.compareTo(result.numericValue()) != 0) throw invalid();
         }
         Map<String, Correction> supplied = new HashMap<>();
         for (Correction correction : body.corrections()) {
@@ -67,11 +63,6 @@ public final class OcrConfirmationValidator {
 
     private static void add(List<Correction> changes, String field, String code, String before, String after, String type) {
         if (!equal(before, after)) changes.add(new Correction(field, code, before, after, type));
-    }
-
-    private static BigDecimal number(String value) {
-        if (value == null || !value.trim().matches("[+-]?\\d+(\\.\\d+)?")) return null;
-        try { return new BigDecimal(value.trim()); } catch (NumberFormatException exception) { throw invalid(); }
     }
 
     private static boolean equal(String first, String second) {

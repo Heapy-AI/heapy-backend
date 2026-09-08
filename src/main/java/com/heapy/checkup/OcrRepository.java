@@ -6,6 +6,9 @@ import com.heapy.checkup.OcrModels.Correction;
 import com.heapy.checkup.OcrModels.Job;
 import com.heapy.checkup.OcrModels.Receipt;
 import com.heapy.checkup.OcrModels.Snapshot;
+import com.heapy.checkup.OcrModels.Detail;
+import com.heapy.checkup.OcrModels.DetailResult;
+import com.heapy.checkup.OcrModels.Finding;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -142,6 +145,36 @@ public class OcrRepository {
                 """, Boolean.class, code));
     }
 
+    public String itemType(String code) {
+        return jdbc.query("select value_type from public.master_checkup_item where item_code = ? and is_active = true",
+                (rs, row) -> rs.getString(1), code).stream().findFirst().orElse(null);
+    }
+
+    public Optional<Detail> detail(UUID user, UUID record) {
+        return jdbc.query("""
+                select record_id, measured_at, provider_name from public.health_checkup_records
+                where record_id = ? and user_id = ?
+                """, (rs, row) -> new Detail(rs.getObject(1, UUID.class), rs.getDate(2).toLocalDate(), rs.getString(3),
+                        detailResults(record), detailFindings(record, "procedure_finding"), detailFindings(record, "overall_opinion")),
+                record, user).stream().findFirst();
+    }
+
+    private List<DetailResult> detailResults(UUID record) {
+        return jdbc.query("""
+                select r.item_code, m.item_name, r.value, r.numeric_value, r.unit, r.status
+                from public.health_checkup_results r join public.master_checkup_item m using(item_code)
+                where r.record_id = ? order by m.display_order, r.item_code
+                """, (rs, row) -> new DetailResult(rs.getString(1), rs.getString(2), rs.getString(3),
+                        rs.getBigDecimal(4), rs.getString(5), rs.getString(6)), record);
+    }
+
+    private List<Finding> detailFindings(UUID record, String classification) {
+        return jdbc.query("""
+                select content from public.health_checkup_findings
+                where record_id = ? and classification = ? order by display_order, finding_id
+                """, (rs, row) -> OcrJson.MAPPER.readValue(rs.getString(1), Finding.class), record, classification);
+    }
+
     public boolean duplicate(UUID user, String fingerprint) {
         return jdbc.queryForObject("""
                 select count(*) > 0 from public.health_checkup_records where user_id = ? and source_fingerprint = ?
@@ -161,6 +194,8 @@ public class OcrRepository {
                     values (?,?,?,?,?,?,?)
                     """, UUID.randomUUID(), record, result.itemCode(), result.value(), result.numericValue(), result.unit(), result.status());
         }
+        saveFindings(record, body.findings());
+        saveFindings(record, body.overallOpinions());
         for (var correction : corrections) {
             jdbc.update("""
                     insert into public.ocr_correction_logs (job_id,item_code,field_key,original_value,corrected_value,correction_type)
@@ -169,7 +204,17 @@ public class OcrRepository {
                     "excluded".equals(correction.correctionType()) ? "remove" : "edit");
         }
         close(job, "confirmed");
-        return new Confirmed(record, "ocr", body.results().size(), now);
+        return new Confirmed(record, "ocr", body.results().size(), now, body.findings().size(), body.overallOpinions().size());
+    }
+
+    private void saveFindings(UUID record, List<Finding> findings) {
+        for (int index = 0; index < findings.size(); index++) {
+            Finding finding = findings.get(index);
+            jdbc.update("""
+                    insert into public.health_checkup_findings(record_id, finding_id, classification, display_order, content)
+                    values (?, ?, ?, ?, cast(? as jsonb))
+                    """, record, finding.findingId(), finding.classification(), index, OcrJson.encode(finding));
+        }
     }
 
     private Job map(ResultSet rs, int row) throws SQLException {

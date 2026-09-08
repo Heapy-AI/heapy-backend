@@ -5,6 +5,7 @@ import com.heapy.checkup.OcrModels.Confirmed;
 import com.heapy.checkup.OcrModels.Job;
 import com.heapy.checkup.OcrModels.JobResponse;
 import com.heapy.checkup.OcrModels.Snapshot;
+import com.heapy.checkup.OcrModels.Result;
 import com.heapy.common.exception.ErrorCode;
 import com.heapy.common.exception.HeapyException;
 import java.io.IOException;
@@ -14,6 +15,8 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -24,6 +27,7 @@ import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.exception.SdkException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.databind.node.ObjectNode;
 
 @Service
 public class OcrService {
@@ -98,7 +102,7 @@ public class OcrService {
         if (body.measuredAt().isAfter(LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul"))))) {
             throw new HeapyException(ErrorCode.OCR_INVALID_RESULT);
         }
-        String hash = OcrJson.hash(id + ":" + OcrJson.encode(body));
+        String hash = confirmationHash(id, body);
         Confirmed confirmed = transaction.execute(status -> {
             if (!repository.lockUser(user)) throw new HeapyException(ErrorCode.RESOURCE_NOT_FOUND);
             var receipt = repository.receipt(user, "confirm", key);
@@ -113,12 +117,12 @@ public class OcrService {
             if ("failed".equals(job.status())) throw new HeapyException(ErrorCode.OCR_INVALID_RESULT);
             Snapshot snapshot = read(job);
             if (!"completed".equals(snapshot.status())) throw new HeapyException(ErrorCode.OCR_INVALID_RESULT);
-            var corrections = OcrConfirmationValidator.validate(snapshot.result(), body, repository::activeItem);
+            var validated = OcrReviewValidator.validate(snapshot.result(), body, repository::itemType);
+            Confirmation accepted = validated.confirmation();
             if (!clock.instant().isBefore(job.expiresAt())) throw new HeapyException(ErrorCode.OCR_EXPIRED);
-            String fingerprint = OcrJson.hash(OcrJson.encode(Map.of("measuredAt", body.measuredAt(),
-                    "providerName", body.providerName() == null ? "" : body.providerName(), "results", body.results())));
+            String fingerprint = fingerprint(accepted);
             if (repository.duplicate(user, fingerprint)) throw new HeapyException(ErrorCode.OCR_ALREADY_CONFIRMED);
-            Confirmed response = repository.confirm(job, body, fingerprint, corrections, clock.instant());
+            Confirmed response = repository.confirm(job, accepted, fingerprint, validated.corrections(), clock.instant());
             repository.saveReceipt(job, "confirm", key, hash, response);
             return response;
         });
@@ -147,8 +151,51 @@ public class OcrService {
     }
 
     private Snapshot read(Job job) {
-        try { return gateway.read(job); }
+        try {
+            Snapshot snapshot = gateway.read(job);
+            if ("completed".equals(snapshot.status())) OcrReviewValidator.validateSnapshot(snapshot.result());
+            return snapshot;
+        }
         catch (SdkException exception) { throw new HeapyException(ErrorCode.OCR_UNAVAILABLE); }
+    }
+
+    private String fingerprint(Confirmation body) {
+        // 작성자: 김진우 — 작업별 식별자·선택 이력은 내용 중복 해시에 포함하지 않는다.
+        var content = OcrJson.MAPPER.createObjectNode();
+        content.put("measuredAt", body.measuredAt().toString());
+        content.put("providerName", body.providerName() == null ? "" : body.providerName());
+        var results = content.putArray("results");
+        var ordered = body.reviewVersion() == null ? body.results().stream()
+                : body.results().stream().sorted(Comparator.comparing(Result::itemCode));
+        ordered.forEach(result -> {
+            var node = OcrJson.MAPPER.valueToTree(result).deepCopy();
+            ((ObjectNode) node).remove("fieldKey");
+            results.add(node);
+        });
+        if (!body.findings().isEmpty() || !body.overallOpinions().isEmpty()) {
+            for (String name : List.of("findings", "overallOpinions")) {
+                var array = content.putArray(name);
+                var list = "findings".equals(name) ? body.findings() : body.overallOpinions();
+                list.stream().map(finding -> {
+                    var node = (ObjectNode) OcrJson.MAPPER.valueToTree(finding).deepCopy();
+                    node.remove("findingId");
+                    node.remove("summary");
+                    return OcrJson.encode(node);
+                }).sorted().forEach(value -> array.add(OcrJson.MAPPER.readTree(value)));
+            }
+        }
+        return OcrJson.hash(OcrJson.encode(content));
+    }
+
+    static String confirmationHash(UUID id, Confirmation body) {
+        ObjectNode payload = (ObjectNode) OcrJson.MAPPER.valueToTree(body);
+        if (body.reviewVersion() == null && body.findings().isEmpty() && body.overallOpinions().isEmpty()
+                && body.excludedFieldKeys().isEmpty() && body.results().stream().allMatch(result -> result.fieldKey() == null)) {
+            // 작성자: 김진우 — 배포 전 확정 영수증도 새 필드의 기본값 때문에 재시도가 거절되지 않도록 한다.
+            for (String field : List.of("reviewVersion", "findings", "overallOpinions", "excludedFieldKeys")) payload.remove(field);
+            payload.path("results").forEach(result -> ((ObjectNode) result).remove("fieldKey"));
+        }
+        return OcrJson.hash(id + ":" + OcrJson.encode(payload));
     }
 
     private Job owned(UUID user, UUID id) {
