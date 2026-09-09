@@ -65,6 +65,20 @@ public class ChatService {
         return new Page<>(items, rows.size() > limit ? cursor(sessionId.toString(), items.getFirst().messageOrder()) : null);
     }
 
+    /** 생성 중인 답변의 파트너가 저장 직전에 바뀌지 않도록 같은 잠금을 사용한다. @author 김진우 */
+    @Transactional(timeout = 10)
+    public Session update(UUID userId, UUID sessionId, String title, String companion) {
+        if ((title == null && companion == null) || (title != null && (title.isBlank() || title.length() > 100))
+                || (companion != null && !List.of("heapy_cat", "heapy_dog").contains(companion))) {
+            throw new HeapyException(ErrorCode.INVALID_INPUT);
+        }
+        repository.lockUser(userId);
+        repository.session(userId, sessionId, true);
+        if (repository.active(userId, sessionId)) throw new HeapyException(ErrorCode.CHAT_CONFLICT);
+        repository.updateSession(userId, sessionId, title == null ? null : title.trim(), companion);
+        return repository.session(userId, sessionId, false);
+    }
+
     @Transactional(timeout = 10)
     public void delete(UUID userId, UUID sessionId) {
         repository.lockUser(userId);

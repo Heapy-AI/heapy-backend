@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 
 /** 외부 AI를 호출하지 않는 내부 스트림 계약 시험. @author 김진우 */
 class ChatGatewayTest {
+    private final AtomicReference<String> requestBody = new AtomicReference<>();
     private HttpServer server;
     private ChatGateway gateway;
     private final AtomicReference<String> response = new AtomicReference<>();
@@ -29,7 +30,7 @@ class ChatGatewayTest {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/internal/chat/stream", exchange -> {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
-            exchange.getRequestBody().readAllBytes();
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             byte[] bytes = response.get().getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
             exchange.sendResponseHeaders(200, bytes.length);
@@ -66,6 +67,16 @@ class ChatGatewayTest {
         response.set("event: error\ndata: {\"code\":\"PRIVATE_PROVIDER_ERROR\"}\n\n");
         assertThatThrownBy(() -> gateway.generate(UUID.randomUUID(), "질문", context(), "", stage -> { }, () -> false))
                 .isInstanceOf(HeapyException.class).hasMessageNotContaining("PRIVATE_PROVIDER_ERROR");
+    }
+
+    @Test
+    void 선택한_파트너를_내부_페르소나로_전달한다() {
+        response.set("event: done\ndata: {\"answer\":\"합성 답변\",\"citations\":[],\"summary\":\"\",\"metadata\":{}}\n\n");
+        for (String code : List.of("heapy_cat", "heapy_dog")) {
+            var context = new Context(new Session(UUID.randomUUID(), "합성", code, Instant.now(), null), "", List.of());
+            gateway.generate(UUID.randomUUID(), "질문", context, "", stage -> { }, () -> false);
+            assertThat(requestBody.get()).contains("\"persona\":\"" + (code.equals("heapy_cat") ? "coach" : "professional") + "\"");
+        }
     }
 
     private Context context() {

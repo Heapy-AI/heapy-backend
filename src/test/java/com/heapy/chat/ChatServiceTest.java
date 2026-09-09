@@ -77,6 +77,23 @@ class ChatServiceTest {
     void close() { source.close(); }
 
     @Test
+    void 파트너_변경은_소유권과_생성상태를_검사하고_과거_스냅샷을_보존한다() {
+        var session = tx(() -> service.create(user, UUID.randomUUID(), "heapy_cat"));
+        var reservation = tx(() -> service.reserve(user, session.sessionId(), UUID.randomUUID(), "합성 질문"));
+        assertThatThrownBy(() -> tx(() -> service.update(user, session.sessionId(), null, "heapy_dog"))).isInstanceOf(HeapyException.class);
+        tx(() -> service.complete(reservation, "합성 질문", new Generated("합성 답변", "completed", "요약", List.of(), Map.of())));
+        assertThatThrownBy(() -> tx(() -> service.update(other, session.sessionId(), null, "heapy_dog"))).isInstanceOf(HeapyException.class);
+        assertThatThrownBy(() -> tx(() -> service.update(user, session.sessionId(), null, "invalid"))).isInstanceOf(HeapyException.class);
+        var updated = tx(() -> service.update(user, session.sessionId(), "바꾼 제목", "heapy_dog"));
+        assertThat(updated.companionCode()).isEqualTo("heapy_dog");
+        assertThat(service.context(user, session.sessionId()).summary()).isEqualTo("요약");
+        assertThat(service.messages(user, session.sessionId(), 20, null).items()).allMatch(message -> "heapy_cat".equals(message.companionCodeSnapshot()));
+        var next = tx(() -> service.reserve(user, session.sessionId(), UUID.randomUUID(), "다음 합성 질문"));
+        tx(() -> service.complete(next, "다음 합성 질문", new Generated("다음 합성 답변", "completed", "요약", List.of(), Map.of())));
+        assertThat(service.messages(user, session.sessionId(), 20, null).items().getLast().companionCodeSnapshot()).isEqualTo("heapy_dog");
+    }
+
+    @Test
     void 세션_생성_재시도와_다른사용자_격리() {
         UUID key = UUID.randomUUID();
         var first = tx(() -> service.create(user, key, "heapy_cat"));

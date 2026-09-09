@@ -114,6 +114,13 @@ public class ChatRepository {
                         rs.getTimestamp("expires_at").toInstant()), userId, scope, key).stream().findFirst();
     }
 
+    public void updateSession(UUID userId, UUID sessionId, String title, String companion) {
+        jdbc.update("""
+                update public.chat_sessions set title=coalesce(?,title), companion_code=coalesce(?,companion_code),
+                    updated_at=current_timestamp where user_id=? and session_id=?
+                """, title, companion, userId, sessionId);
+    }
+
     public boolean active(UUID userId, UUID sessionId) {
         return Boolean.TRUE.equals(jdbc.queryForObject("""
                 select exists(select 1 from private.chat_requests where user_id=? and session_id=?
@@ -155,7 +162,7 @@ public class ChatRepository {
                 (citation, index) -> new Citation(citation.getInt("display_order"), citation.getString("source_title"),
                         citation.getString("source_url"), citation.getString("document_id")), messageId);
         return new Message(messageId, rs.getString("role"), rs.getString("content"), rs.getLong("message_order"),
-                rs.getString("response_status"), rs.getTimestamp("created_at").toInstant(), citations, List.of());
+                rs.getString("response_status"), rs.getTimestamp("created_at").toInstant(), citations, List.of(), rs.getString("companion_code_snapshot"));
     }
 
     public record RequestRow(String hash, String state, UUID sessionId, UUID leaseId, UUID userMessageId,

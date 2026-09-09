@@ -54,7 +54,7 @@ public class ChatGateway {
                     "history", context.messages().stream().map(message -> Map.of("role", message.role(),
                             "content", message.content().substring(0, Math.min(2000, message.content().length())))).toList(),
                     "summary", context.summary().substring(0, Math.min(4000, context.summary().length())),
-                    "persona", "coach", "personalContext", health));
+                    "persona", "heapy_dog".equals(context.session().companionCode()) ? "professional" : "coach", "personalContext", health));
             if (body.length > 262144) throw new IllegalArgumentException();
             connection.setFixedLengthStreamingMode(body.length);
             try (var output = connection.getOutputStream()) { output.write(body); }

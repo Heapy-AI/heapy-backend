@@ -3,6 +3,7 @@ package com.heapy.chat;
 import com.heapy.chat.ChatModels.CreateRequest;
 import com.heapy.chat.ChatModels.MessageRequest;
 import com.heapy.chat.ChatModels.Turn;
+import com.heapy.chat.ChatModels.UpdateRequest;
 import com.heapy.common.exception.ErrorCode;
 import com.heapy.common.exception.HeapyException;
 import com.heapy.common.response.ApiResponse;
@@ -28,6 +29,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -77,6 +79,12 @@ public class ChatController {
     public ResponseEntity<?> messages(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID sessionId,
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int limit, @RequestParam(required = false) String cursor) {
         return ok(service.messages(AuthenticatedUser.id(jwt), sessionId, limit, cursor));
+    }
+
+    @PatchMapping("/{sessionId}")
+    public ResponseEntity<?> update(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID sessionId,
+                                    @Valid @RequestBody UpdateRequest request) {
+        return ok(service.update(AuthenticatedUser.id(jwt), sessionId, request.title(), request.companionCode()));
     }
 
     @DeleteMapping("/{sessionId}")

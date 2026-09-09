@@ -13,13 +13,15 @@ public final class ChatModels {
     private ChatModels() { }
 
     public record CreateRequest(@NotBlank @Pattern(regexp = "heapy_cat|heapy_dog") String companionCode) { }
+    public record UpdateRequest(@Size(min = 1, max = 100) String title,
+                                @Pattern(regexp = "heapy_cat|heapy_dog") String companionCode) { }
     public record MessageRequest(@NotBlank @Size(max = 2000) String message) { }
     public record Session(UUID sessionId, String title, String companionCode, Instant createdAt,
                           Instant lastMessageAt) { }
     public record Citation(int displayOrder, String sourceTitle, String sourceUrl, String documentId) { }
     public record Message(UUID messageId, String role, String content, long messageOrder,
                           String responseStatus, Instant createdAt, List<Citation> citations,
-                          List<Object> suggestedActions) { }
+                          List<Object> suggestedActions, String companionCodeSnapshot) { }
     public record Page<T>(List<T> items, String nextCursor) { }
     public record Context(Session session, String summary, List<Message> messages) { }
     public record Generated(String answer, String responseStatus, String summary, List<Citation> citations,
