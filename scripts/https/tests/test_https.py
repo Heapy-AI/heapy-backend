@@ -1,6 +1,7 @@
 """HTTPS 설정의 공개 범위와 약관 경계를 검증한다. 작성자: 김진우."""
 
 import importlib.util
+import re
 import unittest
 from pathlib import Path
 
@@ -14,14 +15,30 @@ class HttpsTest(unittest.TestCase):
         self.assertIn("location / { return 404; }", content)
         self.assertIn("/.well-known/acme-challenge/", content)
 
-    def test_https_proxies_only_api_and_does_not_log_requests(self):
+    def test_https_proxies_api_and_swagger_and_does_not_log_requests(self):
         content = (ROOT / "nginx-https.conf").read_text(encoding="utf-8")
-        self.assertEqual(content.count("proxy_pass"), 1)
+        self.assertEqual(content.count("proxy_pass"), 2)
         self.assertIn("location /api/", content)
         self.assertIn("proxy_pass http://127.0.0.1:8080;", content)
         self.assertIn("access_log off;", content)
         self.assertIn("ssl_protocols TLSv1.2 TLSv1.3;", content)
         self.assertIn("location / { return 404; }", content)
+
+    def test_swagger_route_rejects_unrelated_paths(self):
+        content = (ROOT / "nginx-https.conf").read_text(encoding="utf-8")
+        route = re.search(r"location ~ (\S+) \{", content).group(1)
+        for path in ("/swagger-ui.html", "/swagger-ui/index.html", "/swagger-ui/swagger-ui.css",
+                     "/v3/api-docs", "/v3/api-docs/swagger-config"):
+            self.assertIsNotNone(re.match(route, path), path)
+        for path in ("/actuator/health", "/internal/chat/stream", "/v3/api-docs-other",
+                     "/swagger-ui.html-other", "/swagger-ui-other"):
+            self.assertIsNone(re.match(route, path), path)
+
+    def test_activate_uses_current_source_and_checks_swagger(self):
+        content = (ROOT / "setup.sh").read_text(encoding="utf-8")
+        self.assertIn('install -m 644 "$SOURCE/nginx-https.conf" "$TARGET/nginx.conf"', content)
+        self.assertIn("/v3/api-docs/swagger-config", content)
+        self.assertIn("/internal/chat/stream", content)
 
     def test_terms_are_not_automatically_accepted(self):
         content = (ROOT / "issue-certificate.sh").read_text(encoding="utf-8")

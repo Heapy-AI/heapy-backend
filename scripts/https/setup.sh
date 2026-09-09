@@ -115,12 +115,17 @@ restore() {
     exit "$status"
 }
 trap restore EXIT
-install -m 644 "$TARGET/nginx-https.conf" "$TARGET/nginx.conf"
+# 작성자: 김진우 — 재적용 시에도 이번 실행의 검증 대상 설정을 사용한다.
+install -m 644 "$SOURCE/nginx-https.conf" "$TARGET/nginx.conf"
 docker exec heapy-https nginx -c /etc/heapy/nginx.conf -t
 docker exec heapy-https nginx -c /etc/heapy/nginx.conf -s reload
 sleep 2
 [[ $(curl -sS --connect-to 13.125.12.94:443:127.0.0.1:443 -o /dev/null -w '%{http_code}' https://13.125.12.94/api/users/me) == 401 ]]
 [[ $(curl -sS --connect-to 13.125.12.94:443:127.0.0.1:443 -o /dev/null -w '%{http_code}' https://13.125.12.94/actuator/health) == 404 ]]
+[[ $(curl -sS --connect-to 13.125.12.94:443:127.0.0.1:443 -o /dev/null -w '%{http_code}' https://13.125.12.94/internal/chat/stream) == 404 ]]
+for path in /swagger-ui/index.html /v3/api-docs /v3/api-docs/swagger-config; do
+    [[ $(curl -sS --connect-to 13.125.12.94:443:127.0.0.1:443 -o /dev/null -w '%{http_code}' "https://13.125.12.94$path") == 200 ]]
+done
 systemctl enable --now heapy-certbot-renew.timer
 systemctl is-active heapy-certbot-renew.timer
 trap - EXIT

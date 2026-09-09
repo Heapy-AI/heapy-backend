@@ -99,6 +99,9 @@ rollout
         result = self.execute("success")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("-p 127.0.0.1:8080:8080", result.stderr)
+        self.assertIn("SPRINGDOC_API_DOCS_ENABLED=true", result.stderr)
+        self.assertIn("SPRINGDOC_SWAGGER_UI_ENABLED=true", result.stderr)
+        self.assertIn("SERVER_FORWARD_HEADERS_STRATEGY=framework", result.stderr)
         self.assertIn("DOCKER rm heapy-backend-rollback", result.stderr)
         self.assertNotIn("DOCKER start", result.stderr)
 
