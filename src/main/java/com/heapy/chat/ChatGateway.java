@@ -36,11 +36,17 @@ public class ChatGateway {
 
     public Generated generate(UUID requestId, String question, Context context, String health,
                               Consumer<String> progress, BooleanSupplier cancelled) {
+        return generate(requestId, question, context, health, progress, cancelled, new ChatTrace());
+    }
+
+    public Generated generate(UUID requestId, String question, Context context, String health,
+                              Consumer<String> progress, BooleanSupplier cancelled, ChatTrace trace) {
         if (token.length() < 32) throw new HeapyException(ErrorCode.CHAT_UNAVAILABLE);
         StringBuilder partial = new StringBuilder();
         HttpURLConnection connection = null;
         long deadline = System.nanoTime() + 90_000_000_000L;
         try {
+            trace.stage("internal_request");
             connection = (HttpURLConnection) URI.create(baseUrl + "/internal/chat/stream").toURL().openConnection();
             connection.setConnectTimeout(5000);
             connection.setReadTimeout(90000);
@@ -58,7 +64,11 @@ public class ChatGateway {
             if (body.length > 262144) throw new IllegalArgumentException();
             connection.setFixedLengthStreamingMode(body.length);
             try (var output = connection.getOutputStream()) { output.write(body); }
-            if (connection.getResponseCode() != 200) throw new IllegalStateException();
+            trace.httpStatus = connection.getResponseCode();
+            if (trace.httpStatus != 200) {
+                trace.errorCode = "upstream_http_error";
+                throw new IllegalStateException();
+            }
             try (var reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
                 StringBuilder line = new StringBuilder();
                 String event = "";
@@ -84,19 +94,30 @@ public class ChatGateway {
                     else if (value.startsWith("data:")) data = value.substring(5).strip();
                     else if (value.isEmpty() && !data.isEmpty()) {
                         JsonNode payload = JSON.readTree(data);
-                        if ("status".equals(event)) progress.accept("generating");
+                        if ("status".equals(event)) {
+                            trace.stage(payload.path("stage").asText(""));
+                            progress.accept("generating");
+                        }
                         else if ("delta".equals(event)) {
                             partial.append(payload.path("content").asText(""));
                             if (partial.length() > 16000) throw new IllegalArgumentException();
-                        } else if ("done".equals(event)) return completed(payload);
-                        else if ("error".equals(event)) throw new IllegalStateException();
+                        } else if ("done".equals(event)) {
+                            readDiagnostics(payload.path("diagnostics"), trace);
+                            trace.stage("validate_response");
+                            return completed(payload);
+                        } else if ("error".equals(event)) {
+                            trace.stage(payload.path("stage").asText(""));
+                            String code = payload.path("diagnosticCode").asText("");
+                            trace.errorCode = List.of("timeout", "invalid_response", "upstream_failure", "incomplete_stream").contains(code) ? code : "upstream_failure";
+                            throw new IllegalStateException();
+                        }
                         data = "";
                         event = "";
                     }
                 }
             }
-        } catch (Exception ignored) {
-            // 작성자: 김진우 — 내부 공급자의 예외·요청·키를 외부 응답에 포함하지 않는다.
+        } catch (Exception error) {
+            trace.failure(error);
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -104,6 +125,23 @@ public class ChatGateway {
             return new Generated(partial.toString(), "partial", "", List.of(), Map.of());
         }
         throw new HeapyException(ErrorCode.CHAT_UNAVAILABLE);
+    }
+
+    private void readDiagnostics(JsonNode node, ChatTrace trace) {
+        for (String key : List.of("personalContextUsed", "grounded", "uncertain", "guardTriggered", "emergency")) {
+            if (node.path(key).isBoolean()) trace.details.put(key, node.path(key).asBoolean());
+        }
+        for (String key : List.of("documentCount", "citationCount", "failedCollectionCount", "searchedCollectionCount")) {
+            if (node.path(key).isIntegralNumber() && node.path(key).asInt() >= 0 && node.path(key).asInt() <= 10000)
+                trace.details.put(key, node.path(key).asInt());
+        }
+        double confidence = node.path("confidence").asDouble(-1);
+        if (Double.isFinite(confidence) && confidence >= 0 && confidence <= 1) trace.details.put("confidence", confidence);
+        // 작성자: 김진우 — 자유 서술 필드는 수집하지 않으며 상태 토큰만 받는다.
+        for (String key : List.of("intent", "modelVersion", "verificationMethod", "evidenceStatus", "auditStatus")) {
+            String value = node.path(key).asText("");
+            if (value.matches("[A-Za-z0-9_.:-]{1,80}")) trace.details.put(key, value);
+        }
     }
 
     private Generated completed(JsonNode body) {

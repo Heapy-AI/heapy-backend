@@ -44,6 +44,26 @@ class ChatGatewayTest {
     void stop() { server.stop(0); }
 
     @Test
+    void 진단정보는_허용된_필드만_보존한다() {
+        response.set("event: done\ndata: {\"answer\":\"합성\",\"citations\":[],\"diagnostics\":{\"confidence\":0.9,\"personalContextUsed\":true,\"documentCount\":2,\"answer\":\"비밀\",\"modelVersion\":\"문장 원문\"}}\n\n");
+        ChatTrace trace = new ChatTrace();
+        gateway.generate(UUID.randomUUID(), "질문", context(), "", stage -> { }, () -> false, trace);
+        assertThat(trace.details).containsEntry("confidence", 0.9).containsEntry("personalContextUsed", true)
+                .doesNotContainKeys("answer", "modelVersion");
+    }
+
+    @Test
+    void 실패_단계와_코드는_원문없이_보존한다() {
+        response.set("event: status\ndata: {\"stage\":\"search_evidence\"}\n\nevent: error\ndata: {\"diagnosticCode\":\"upstream_failure\",\"message\":\"비밀\"}\n\n");
+        ChatTrace trace = new ChatTrace();
+        assertThatThrownBy(() -> gateway.generate(UUID.randomUUID(), "질문", context(), "", stage -> { }, () -> false, trace))
+                .isInstanceOf(HeapyException.class);
+        assertThat(trace.stage).isEqualTo("search_evidence");
+        assertThat(trace.errorCode).isEqualTo("upstream_failure");
+        assertThat(trace.details).isEmpty();
+    }
+
+    @Test
     void 검증된_최종답변을_저장용으로_선택한다() {
         response.set("event: delta\ndata: {\"content\":\"검증 전\"}\n\n"
                 + "event: done\ndata: {\"answer\":\"최종 합성 답변\",\"citations\":[],\"summary\":\"요약\",\"metadata\":{}}\n\n");

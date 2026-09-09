@@ -47,11 +47,13 @@ public class ChatController {
     private final ChatService service;
     private final ChatGateway gateway;
     private final ChatHealthContext health;
+    private final ChatDiagnostics diagnostics;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final Semaphore capacity = new Semaphore(2);
 
-    public ChatController(ChatService service, ChatGateway gateway, ChatHealthContext health) {
+    public ChatController(ChatService service, ChatGateway gateway, ChatHealthContext health, ChatDiagnostics diagnostics) {
         this.service = service; this.gateway = gateway; this.health = health;
+        this.diagnostics = diagnostics;
     }
 
     @PreDestroy
@@ -107,28 +109,40 @@ public class ChatController {
         emitter.onTimeout(() -> cancelled.set(true));
         emitter.onError(error -> cancelled.set(true));
         executor.submit(() -> {
+            ChatTrace trace = new ChatTrace();
+            diagnostics.record(key, sessionId, trace, "started");
             try {
                 send(emitter, "status", Map.of("stage", "retrieving", "message", "관련 건강 정보를 확인하고 있어요."));
                 Turn turn;
                 if (reservation.replay()) turn = service.replay(reservation);
                 else {
+                    trace.stage("load_conversation");
                     var context = service.context(user, sessionId);
-                    var generated = gateway.generate(key, request.message(), context, health.load(user), stage -> {
+                    trace.stage("load_health_context");
+                    String personalContext = health.load(user);
+                    trace.details.put("personalContextAvailable", !personalContext.isBlank());
+                    var generated = gateway.generate(key, request.message(), context, personalContext, stage -> {
                         if (!cancelled.get()) {
                             try { send(emitter, "status", Map.of("stage", stage, "message", "답변을 준비하고 있어요.")); }
                             catch (IOException exception) { cancelled.set(true); }
                         }
-                    }, cancelled::get);
+                    }, cancelled::get, trace);
+                    trace.stage("save_conversation");
                     turn = service.complete(reservation, request.message(), generated);
                 }
+                trace.stage("deliver");
                 if (!cancelled.get()) {
                     send(emitter, "delta", Map.of("content", turn.generated().answer()));
                     send(emitter, "done", Map.of("sessionId", sessionId, "userMessageId", turn.userMessageId(),
                             "assistantMessageId", turn.assistantMessageId(), "responseStatus", turn.generated().responseStatus(),
                             "citations", turn.generated().citations(), "metadata", turn.generated().metadata()));
                 }
+                trace.stage("done");
+                diagnostics.record(key, sessionId, trace, cancelled.get() ? "disconnected" : turn.generated().responseStatus());
                 emitter.complete();
             } catch (Exception exception) {
+                trace.failure(exception);
+                diagnostics.record(key, sessionId, trace, "failed");
                 if (!reservation.replay()) {
                     try { service.fail(reservation); } catch (RuntimeException ignored) { }
                 }
