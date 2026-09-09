@@ -129,6 +129,11 @@ public class ChatService {
         if (!row.leaseId().equals(reservation.leaseId()) || !"started".equals(row.state()) || row.expiresAt().isBefore(Instant.now())) {
             throw new HeapyException(ErrorCode.CHAT_CONFLICT);
         }
+        repository.setInitialTitle(reservation.userId(), reservation.sessionId(), displayTitle(question));
+        if ("completed".equals(generated.responseStatus()) && !generated.summary().isBlank()
+                && !generated.summary().equals(repository.summary(reservation.userId(), reservation.sessionId()))) {
+            repository.setSummaryTitle(reservation.userId(), reservation.sessionId(), displayTitle(generated.summary()));
+        }
         repository.insertMessage(reservation.userMessageId(), reservation.sessionId(), "user", question,
                 "completed", session.companionCode());
         repository.insertMessage(reservation.assistantMessageId(), reservation.sessionId(), "assistant", generated.answer(),
@@ -159,6 +164,14 @@ public class ChatService {
                 || ("partial".equals(value.responseStatus()) && !value.citations().isEmpty())) {
             throw new HeapyException(ErrorCode.CHAT_UNAVAILABLE);
         }
+    }
+
+    /** 원문은 메시지·요약에 보존하고 제목만 기존 100자 한도에 맞춘다. @author 김진우 */
+    static String displayTitle(String value) {
+        String title = value.replaceAll("\\s+", " ").strip();
+        if (title.length() <= 100) return title;
+        int end = Character.isHighSurrogate(title.charAt(98)) ? 98 : 99;
+        return title.substring(0, end) + "…";
     }
 
     private static String scope(UUID id) { return "message:" + id; }

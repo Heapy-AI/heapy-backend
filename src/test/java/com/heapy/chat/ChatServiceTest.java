@@ -49,7 +49,7 @@ class ChatServiceTest {
         jdbc.execute("create table users(user_id uuid primary key,onboarding_completed_at timestamp with time zone)");
         jdbc.execute("""
                 create table chat_sessions(session_id uuid primary key,user_id uuid references users(user_id),title text default '새 대화',
-                companion_code text,summary text,summary_version integer default 0,created_at timestamp with time zone default current_timestamp,
+                companion_code text,summary text,summary_version integer default 0,title_manually_edited boolean not null default false,created_at timestamp with time zone default current_timestamp,
                 updated_at timestamp with time zone default current_timestamp,last_message_at timestamp with time zone)
                 """);
         jdbc.execute("""
@@ -75,6 +75,45 @@ class ChatServiceTest {
 
     @AfterEach
     void close() { source.close(); }
+
+    @Test
+    void 첫질문_제목은_요약이_생길때까지_유지하고_새요약으로_갱신한다() {
+        var session = tx(() -> service.create(user, UUID.randomUUID(), "heapy_cat"));
+        finishTurn(session.sessionId(), "첫 질문", "");
+        assertThat(service.session(user, session.sessionId()).title()).isEqualTo("첫 질문");
+        finishTurn(session.sessionId(), "다음 질문", "");
+        assertThat(service.session(user, session.sessionId()).title()).isEqualTo("첫 질문");
+        finishTurn(session.sessionId(), "세 번째 질문", "활동과 수면에 대한 상담");
+        assertThat(service.session(user, session.sessionId()).title()).isEqualTo("활동과 수면에 대한 상담");
+        finishTurn(session.sessionId(), "추가 질문", "새 누적 요약");
+        assertThat(service.session(user, session.sessionId()).title()).isEqualTo("새 누적 요약");
+    }
+
+    @Test
+    void 수동제목은_기본제목과_같아도_보호하고_파트너변경은_자동제목을_유지한다() {
+        var session = tx(() -> service.create(user, UUID.randomUUID(), "heapy_cat"));
+        tx(() -> service.update(user, session.sessionId(), null, "heapy_dog"));
+        finishTurn(session.sessionId(), "첫 질문", "");
+        assertThat(service.session(user, session.sessionId()).title()).isEqualTo("첫 질문");
+        tx(() -> service.update(user, session.sessionId(), "새 대화", null));
+        finishTurn(session.sessionId(), "다음 질문", "요약");
+        assertThat(service.session(user, session.sessionId()).title()).isEqualTo("새 대화");
+    }
+
+    @Test
+    void 긴제목은_말줄임하고_원문은_보존한다() {
+        var session = tx(() -> service.create(user, UUID.randomUUID(), "heapy_cat"));
+        String question = "질".repeat(120);
+        finishTurn(session.sessionId(), question, "");
+        assertThat(service.session(user, session.sessionId()).title()).isEqualTo("질".repeat(99) + "…");
+        assertThat(service.messages(user, session.sessionId(), 20, null).items().getFirst().content()).isEqualTo(question);
+        assertThat(ChatService.displayTitle("질".repeat(98) + "😀긴 질문")).isEqualTo("질".repeat(98) + "…");
+    }
+
+    private void finishTurn(UUID sessionId, String question, String summary) {
+        var reservation = tx(() -> service.reserve(user, sessionId, UUID.randomUUID(), question));
+        tx(() -> service.complete(reservation, question, new Generated("합성 답변", "completed", summary, List.of(), Map.of())));
+    }
 
     @Test
     void 파트너_변경은_소유권과_생성상태를_검사하고_과거_스냅샷을_보존한다() {
@@ -176,6 +215,7 @@ class ChatServiceTest {
         var value = new Generated("답변", "completed", "요약", List.of(new Citation(1, "근거", null, "synthetic")), Map.of());
         assertThatThrownBy(() -> tx(() -> service.complete(reservation, "질문", value))).isInstanceOf(IllegalStateException.class);
         assertThat(repository.messages(user, session.sessionId(), 20, Long.MAX_VALUE)).isEmpty();
+        assertThat(service.session(user, session.sessionId()).title()).isEqualTo("새 대화");
     }
 
     private Generated answer() { return new Generated("합성 답변", "completed", "", List.of(), Map.of()); }

@@ -118,8 +118,24 @@ public class ChatRepository {
     public void updateSession(UUID userId, UUID sessionId, String title, String companion) {
         jdbc.update("""
                 update public.chat_sessions set title=coalesce(?,title), companion_code=coalesce(?,companion_code),
+                    title_manually_edited=case when ? then true else title_manually_edited end,
                     updated_at=current_timestamp where user_id=? and session_id=?
-                """, title, companion, userId, sessionId);
+                """, title, companion, title != null, userId, sessionId);
+    }
+
+    /** 첫 저장 질문으로 제목을 정하며 같은 트랜잭션의 세션 잠금으로 수동 수정을 보호한다. @author 김진우 */
+    public void setInitialTitle(UUID userId, UUID sessionId, String title) {
+        jdbc.update("""
+                update public.chat_sessions set title=? where session_id=? and user_id=?
+                and title='새 대화' and title_manually_edited=false
+                and not exists(select 1 from public.chat_messages where session_id=? and role='user')
+                """, title, sessionId, userId, sessionId);
+    }
+
+    /** 새 누적 요약이 생기면 자동 제목을 갱신한다. @author 김진우 */
+    public void setSummaryTitle(UUID userId, UUID sessionId, String title) {
+        jdbc.update("update public.chat_sessions set title=? where session_id=? and user_id=? and title_manually_edited=false",
+                title, sessionId, userId);
     }
 
     public boolean active(UUID userId, UUID sessionId) {
