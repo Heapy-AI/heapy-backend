@@ -129,11 +129,10 @@ public class ChatService {
         if (!row.leaseId().equals(reservation.leaseId()) || !"started".equals(row.state()) || row.expiresAt().isBefore(Instant.now())) {
             throw new HeapyException(ErrorCode.CHAT_CONFLICT);
         }
-        long order = repository.lastOrder(reservation.sessionId());
         repository.insertMessage(reservation.userMessageId(), reservation.sessionId(), "user", question,
-                order + 1, "completed", session.companionCode());
+                "completed", session.companionCode());
         repository.insertMessage(reservation.assistantMessageId(), reservation.sessionId(), "assistant", generated.answer(),
-                order + 2, generated.responseStatus(), session.companionCode());
+                generated.responseStatus(), session.companionCode());
         boolean completed = "completed".equals(generated.responseStatus());
         if (completed) {
             for (Citation citation : generated.citations()) repository.insertCitation(reservation.assistantMessageId(), citation);

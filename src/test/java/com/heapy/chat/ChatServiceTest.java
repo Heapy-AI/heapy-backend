@@ -54,7 +54,7 @@ class ChatServiceTest {
                 """);
         jdbc.execute("""
                 create table chat_messages(message_id uuid primary key,session_id uuid references chat_sessions(session_id) on delete cascade,
-                role text,content text,message_order bigint,response_status text,companion_code_snapshot text,
+                role text,content text,message_order bigint generated always as identity,response_status text,companion_code_snapshot text,
                 created_at timestamp with time zone default current_timestamp,unique(session_id,message_order))
                 """);
         jdbc.execute("""

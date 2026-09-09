@@ -83,12 +83,13 @@ public class ChatRepository {
         return order == null ? 0 : order;
     }
 
-    public void insertMessage(UUID id, UUID sessionId, String role, String content, long order,
+    public void insertMessage(UUID id, UUID sessionId, String role, String content,
                               String status, String companion) {
+        // 작성자: 김진우 — message_order는 공유 DB의 GENERATED ALWAYS IDENTITY가 생성한다.
         jdbc.update("""
-                insert into public.chat_messages(message_id,session_id,role,content,message_order,response_status,companion_code_snapshot)
-                values (?,?,?,?,?,?,?)
-                """, id, sessionId, role, content, order, status, companion);
+                insert into public.chat_messages(message_id,session_id,role,content,response_status,companion_code_snapshot)
+                values (?,?,?,?,?,?)
+                """, id, sessionId, role, content, status, companion);
     }
 
     public void insertCitation(UUID messageId, Citation citation) {
