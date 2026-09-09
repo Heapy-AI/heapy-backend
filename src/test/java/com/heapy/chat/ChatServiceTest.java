@@ -58,7 +58,7 @@ class ChatServiceTest {
                 created_at timestamp with time zone default current_timestamp,unique(session_id,message_order))
                 """);
         jdbc.execute("""
-                create table chat_message_citations(citation_id bigint generated always as identity primary key,
+                create table chat_message_citations(citation_id uuid primary key,
                 message_id uuid references chat_messages(message_id) on delete cascade,display_order integer,
                 source_type text,source_title text,source_url text,document_id text)
                 """);
