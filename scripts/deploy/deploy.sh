@@ -60,6 +60,7 @@ rollout() {
     DEPLOYING=1
   fi
   docker run -d --name "$APP" --restart unless-stopped \
+    --network heapy-app \
     --user 10001:10001 --read-only --tmpfs /tmp:rw,nosuid,noexec,size=256m \
     --cap-drop ALL --security-opt no-new-privileges:true \
     --memory 2g --cpus 1.5 --log-opt max-size=10m --log-opt max-file=3 \
@@ -91,6 +92,8 @@ main() {
   [[ $(stat -c '%u:%a' "$ENV_FILE") == 0:600 ]] || { echo '환경 파일은 root 소유, 권한 600이어야 합니다.' >&2; return 1; }
   python3 "$SCRIPT_DIR/validate_env.py" "$ENV_FILE"
   docker info >/dev/null
+  # 작성자: 김진우 — 내부 AI 연결을 다음 컨테이너 교체에서도 유지한다.
+  docker network inspect heapy-app >/dev/null 2>&1 || docker network create heapy-app >/dev/null
   # 기존 앱을 중단하기 전에 인증·다운로드를 완료한다.
   aws ecr get-login-password --region "$REGION" |
     docker login --username AWS --password-stdin "${IMAGE%%/*}" >/dev/null

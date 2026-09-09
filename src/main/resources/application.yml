@@ -25,6 +25,10 @@ spring:
           jws-algorithms: ES256
 
 heapy:
+  chat:
+    enabled: ${CHAT_ENABLED:false}
+    base-url: ${CHAT_BASE_URL:http://heapy-fastapi:8000}
+    internal-token: ${CHAT_INTERNAL_TOKEN:}
   ocr:
     enabled: ${OCR_ENABLED:true}
     region: ${OCR_REGION:ap-northeast-2}

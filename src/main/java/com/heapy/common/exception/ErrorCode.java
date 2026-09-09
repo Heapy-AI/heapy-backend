@@ -3,6 +3,8 @@ package com.heapy.common.exception;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
+    CHAT_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "CHAT-001", "상담 서비스를 준비 중이거나 일시적으로 연결할 수 없습니다."),
+    CHAT_CONFLICT(HttpStatus.CONFLICT, "CHAT-002", "진행 중인 답변이 있습니다. 완료 후 다시 시도해 주세요."),
     OCR_FILE_LIMIT(HttpStatus.PAYLOAD_TOO_LARGE, "OCR-001", "파일은 20MB 이하, PDF는 20페이지 이하로 등록해 주세요."),
     OCR_UNSUPPORTED_FILE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "OCR-002", "비밀번호가 없는 PDF 또는 JPG, PNG 파일을 등록해 주세요."),
     OCR_EXPIRED(HttpStatus.GONE, "OCR-003", "OCR 작업이 만료되었거나 종료됐습니다. 파일을 다시 등록해 주세요."),

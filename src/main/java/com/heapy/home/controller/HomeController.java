@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.CacheControl;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,6 +31,7 @@ public class HomeController {
     @Operation(summary = "홈 카드 전체 조합 조회")
     public ResponseEntity<ApiResponse<HomeResponse>> getHome(@AuthenticationPrincipal Jwt jwt) {
         HomeResponse response = homeService.getHome(AuthenticatedUser.id(jwt));
-        return ResponseEntity.ok(ApiResponse.success(response, "홈 화면을 조회했습니다."));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(ApiResponse.success(response, "홈 화면을 조회했습니다."));
     }
 }

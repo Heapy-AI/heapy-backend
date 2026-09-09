@@ -6,6 +6,7 @@ import com.heapy.home.domain.UserHomeModule;
 import com.heapy.home.dto.HomeModuleResponse;
 import com.heapy.home.dto.HomeResponse;
 import com.heapy.home.repository.UserHomeModuleRepository;
+import com.heapy.home.repository.HomeSummaryRepository;
 import com.heapy.user.domain.User;
 import com.heapy.user.repository.UserRepository;
 import java.time.Instant;
@@ -37,13 +38,16 @@ public class HomeService {
 
     private final UserRepository userRepository;
     private final UserHomeModuleRepository homeModuleRepository;
+    private final HomeSummaryRepository summaryRepository;
 
     public HomeService(
             UserRepository userRepository,
-            UserHomeModuleRepository homeModuleRepository
+            UserHomeModuleRepository homeModuleRepository,
+            HomeSummaryRepository summaryRepository
     ) {
         this.userRepository = userRepository;
         this.homeModuleRepository = homeModuleRepository;
+        this.summaryRepository = summaryRepository;
     }
 
     @Transactional
@@ -58,14 +62,17 @@ public class HomeService {
         if (modules.isEmpty()) {
             modules = createDefaultModules(userId);
         }
+        HomeSummaryRepository.Summary summary = summaryRepository.find(userId);
+        boolean hasMetrics = summary != null && summary.hasData();
         List<HomeModuleResponse> moduleResponses = modules.stream()
                 .map(module -> new HomeModuleResponse(
                         module.getModuleCode(),
                         module.isVisible(),
                         module.getDisplayOrder(),
-                        "empty",
-                        null,
-                        EMPTY_ACTIONS.get(module.getModuleCode())
+                        "key_metrics".equals(module.getModuleCode()) && hasMetrics ? "ready" : "empty",
+                        "key_metrics".equals(module.getModuleCode()) && hasMetrics ? summary : null,
+                        "key_metrics".equals(module.getModuleCode()) && hasMetrics
+                                ? null : EMPTY_ACTIONS.get(module.getModuleCode())
                 ))
                 .toList();
         return new HomeResponse(LocalDate.now(SERVICE_ZONE), List.of(), moduleResponses);
