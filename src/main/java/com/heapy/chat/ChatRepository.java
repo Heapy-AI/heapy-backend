@@ -93,9 +93,9 @@ public class ChatRepository {
 
     public void insertCitation(UUID messageId, Citation citation) {
         jdbc.update("""
-                insert into public.chat_message_citations(citation_id,message_id,display_order,source_type,source_title,source_url,document_id)
-                values (?,?,?,'rag',?,?,?)
-                """, UUID.randomUUID(), messageId, citation.displayOrder(), citation.sourceTitle(), citation.sourceUrl(), citation.documentId());
+                insert into public.chat_message_citations(message_id,display_order,source_type,source_title,source_url,document_id)
+                values (?,?,'rag',?,?,?)
+                """, messageId, citation.displayOrder(), citation.sourceTitle(), citation.sourceUrl(), citation.documentId());
     }
 
     public void updateSummary(UUID sessionId, String summary, boolean completed) {
