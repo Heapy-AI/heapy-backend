@@ -28,7 +28,7 @@ class HealthSyncServicePostgresTest {
         try (var source = new HikariDataSource()) {
             source.setJdbcUrl(System.getenv("HEAPY_SYNC_TEST_POSTGRES_URL")); source.setUsername("postgres"); source.setPassword("postgres");
             JdbcTemplate jdbc = new JdbcTemplate(source);
-            String migration = Files.readString(Path.of("supabase/migrations/20260910055554_samsung_health_sync.sql"));
+            String migration = Files.readString(Path.of("supabase/migrations/20260910062832_samsung_health_sync.sql"));
             new TransactionTemplate(new DataSourceTransactionManager(source)).executeWithoutResult(tx -> {
                 tx.setRollbackOnly();
                 fixture(jdbc); jdbc.execute(migration);

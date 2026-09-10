@@ -1,4 +1,6 @@
 -- 작성자: 김진우 — 원본 재수신·삭제 재생 방지와 설치별 완료 지점을 보존한다.
+set local lock_timeout='5s';
+set local statement_timeout='60s';
 create table private.health_sync_versions (
     user_id uuid not null references public.users(user_id) on delete cascade,
     metric text not null check (metric in ('sleep','bio','activity','exercise','nutrition','water')),
