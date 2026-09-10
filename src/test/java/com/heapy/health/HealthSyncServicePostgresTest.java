@@ -74,6 +74,13 @@ class HealthSyncServicePostgresTest {
                 assertThat(jdbc.queryForObject("select count(*) from private.health_analysis_invalidations", Integer.class)).isZero();
                 jdbc.execute("update public.lifestyle_water_intake set amount_ml=700");
                 assertThat(jdbc.queryForObject("select count(*) from private.health_analysis_invalidations", Integer.class)).isEqualTo(1);
+                var bulk = OcrJson.MAPPER.createArrayNode();
+                for (int i = 0; i < 200; i++) bulk.add(OcrJson.MAPPER.valueToTree(Map.of("metric","water","externalRecordId","water:bulk-"+i,
+                        "sourceUpdatedAt","2026-08-08T00:00:00Z","data",Map.of("consumedAt","2026-08-07T00:00:00Z","amountMl",100+i))));
+                var bulkBody = OcrJson.MAPPER.valueToTree(Map.of("connectionId",connection,"syncMode","foreground","dataType","water","records",bulk));
+                assertThat(sync.save(user, UUID.randomUUID(), bulkBody).path("insertedCount").asInt()).isEqualTo(200);
+                assertThat(sync.save(user, UUID.randomUUID(), bulkBody).path("skippedCount").asInt()).isEqualTo(200);
+                assertThat(jdbc.queryForObject("select count(*) from public.lifestyle_water_intake", Integer.class)).isEqualTo(201);
             });
         }
     }

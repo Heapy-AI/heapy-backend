@@ -66,7 +66,9 @@ public class HealthSyncService {
         jdbc.update("insert into public.health_sync_runs(sync_run_id,connection_id,idempotency_key,sync_mode,requested_data_types,received_count) values(?,?,?,?,?,?)",
                 run, connection, key, mode, new SqlArrayValue("text", stream.equals("activity") ? new Object[]{"steps", "floors", "activity"} : new Object[]{stream}), records.size());
         int[] counts = new int[4];
-        for (Record record : records) counts[apply(user, run, record)]++;
+        int batchOperation = applyUnchangedOrNewBatch(user, run, records);
+        if (batchOperation >= 0) counts[batchOperation] = records.size();
+        else for (Record record : records) counts[apply(user, run, record)]++;
         if (through != null) {
             jdbc.update("""
                     insert into private.health_sync_checkpoints(connection_id,data_type,through_at) values(?,?,?)
@@ -85,6 +87,44 @@ public class HealthSyncService {
                 "insertedCount", counts[0], "updatedCount", counts[1], "skippedCount", counts[2], "deletedCount", counts[3], "cursorState", cursors));
         jdbc.update("insert into private.health_record_requests(user_id,operation,request_key,request_hash,response_body) values(?,'samsung-sync',?,?,?::jsonb)", user, key, hash, OcrJson.encode(response));
         return response;
+    }
+
+    /** 초기 대량 수신은 두 번의 충돌 조회와 JDBC 배치로 저장한다. @author 김진우 */
+    private int applyUnchangedOrNewBatch(UUID user, UUID run, List<Record> records) {
+        if (records.isEmpty() || records.stream().anyMatch(Record::deleted)
+                || records.stream().map(Record::externalId).distinct().count() != records.size()) return -1;
+        HealthMetric metric = records.getFirst().metric();
+        Object[] ids = records.stream().map(Record::externalId).toArray();
+        Map<String, Instant> known = new LinkedHashMap<>();
+        jdbc.query("select external_record_id,source_updated_at from private.health_sync_versions where user_id=? and metric=? and external_record_id=any(?)",
+                rs -> { known.put(rs.getString(1), rs.getTimestamp(2).toInstant()); }, user, metric.code(), new SqlArrayValue("text", ids));
+        if (!known.isEmpty()) {
+            if (records.stream().allMatch(record -> known.containsKey(record.externalId())
+                    && !known.get(record.externalId()).isBefore(record.updatedAt()))) return 2;
+            return -1;
+        }
+        Object[] times = records.stream().map(record -> {
+            Object time = record.values().get(metric.time());
+            return time instanceof Timestamp timestamp ? timestamp.toInstant().toString() : time.toString();
+        }).toArray();
+        String manual = metric == HealthMetric.ACTIVITY ? "" : "source='manual' and ";
+        Boolean occupied = jdbc.queryForObject("select exists(select 1 from public." + metric.table()
+                        + " where user_id=? and (external_record_id=any(?) or (" + manual + metric.time() + "=any(?))))",
+                Boolean.class, user, new SqlArrayValue("text", ids), new SqlArrayValue(metric.dateOnly() ? "date" : "timestamptz", times));
+        if (Boolean.TRUE.equals(occupied)) return -1;
+        List<Object[]> rows = new ArrayList<>(), versions = new ArrayList<>();
+        List<String> columns = new ArrayList<>(records.getFirst().values().keySet());
+        columns.addAll(List.of(metric.id(), "user_id", "source", "external_record_id", "source_updated_at", "sync_run_id"));
+        for (Record record : records) {
+            List<Object> values = new ArrayList<>(record.values().values());
+            values.addAll(List.of(UUID.randomUUID(), user, "samsung_health", record.externalId(), Timestamp.from(record.updatedAt()), run));
+            rows.add(values.toArray());
+            versions.add(new Object[]{user, metric.code(), record.externalId(), Timestamp.from(record.updatedAt()), false});
+        }
+        jdbc.batchUpdate("insert into public." + metric.table() + " (" + String.join(",", columns) + ") values ("
+                + String.join(",", columns.stream().map(column -> "?").toList()) + ")", rows);
+        jdbc.batchUpdate("insert into private.health_sync_versions(user_id,metric,external_record_id,source_updated_at,deleted) values(?,?,?,?,?)", versions);
+        return 0;
     }
 
     private int apply(UUID user, UUID run, Record record) {
