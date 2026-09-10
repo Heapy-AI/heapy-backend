@@ -63,6 +63,17 @@ class HealthSyncServicePostgresTest {
                 assertThat(jdbc.queryForObject("select last_synced_at from public.health_data_connections", Timestamp.class)).isNull();
                 assertThat(jdbc.queryForObject("select has_table_privilege('authenticated','private.health_sync_versions','SELECT')", Boolean.class)).isFalse();
                 assertThat(sync.state(user, connection).path("cursorState").path("water").asText()).isEqualTo("2026-08-06T00:00:00Z");
+                for (String stream : new String[]{"sleep","heart_rate","blood_glucose","blood_pressure","body_composition","exercise","activity","nutrition"}) {
+                    sync.save(user, UUID.randomUUID(), OcrJson.MAPPER.valueToTree(Map.of("connectionId",connection,"syncMode","foreground","dataType",stream,"through","2026-08-07T00:00:00Z","records",new Object[]{})));
+                }
+                assertThat(jdbc.queryForObject("select last_synced_at from public.health_data_connections", Timestamp.class).toInstant().toString()).isEqualTo("2026-08-06T00:00:00Z");
+                jdbc.execute("create table private.health_analysis_invalidations(user_id uuid,analysis_date date,primary key(user_id,analysis_date))");
+                jdbc.execute("create trigger invalidate_daily_analysis before update or delete on public.lifestyle_water_intake for each row execute function private.invalidate_health_analysis()");
+                jdbc.execute("update public.lifestyle_water_intake set created_at=now()-interval '2 days'");
+                jdbc.execute("update public.lifestyle_water_intake set source_updated_at=now(),updated_at=now()");
+                assertThat(jdbc.queryForObject("select count(*) from private.health_analysis_invalidations", Integer.class)).isZero();
+                jdbc.execute("update public.lifestyle_water_intake set amount_ml=700");
+                assertThat(jdbc.queryForObject("select count(*) from private.health_analysis_invalidations", Integer.class)).isEqualTo(1);
             });
         }
     }

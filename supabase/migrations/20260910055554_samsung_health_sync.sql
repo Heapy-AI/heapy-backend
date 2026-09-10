@@ -31,3 +31,26 @@ create index if not exists idx_bio_external on public.lifestyle_bio(user_id,exte
 create index if not exists idx_exercise_external on public.lifestyle_exercise(user_id,external_record_id) where external_record_id is not null;
 create index if not exists idx_nutrition_external on public.lifestyle_nutrition(user_id,external_record_id) where external_record_id is not null;
 create index if not exists idx_water_external on public.lifestyle_water_intake(user_id,external_record_id) where external_record_id is not null;
+
+-- 작성자: 김진우 — 같은 수치를 다시 받은 동기화 메타데이터만으로 당일 분석을 무효화하지 않는다.
+create or replace function private.invalidate_health_analysis() returns trigger
+language plpgsql security invoker set search_path = '' as $$
+declare analysis_day date := (clock_timestamp() at time zone 'Asia/Seoul')::date;
+begin
+    if tg_op = 'UPDATE' then
+        if (to_jsonb(old) - array['updated_at','source_updated_at','sync_run_id','external_record_id','is_user_override'])
+           is not distinct from
+           (to_jsonb(new) - array['updated_at','source_updated_at','sync_run_id','external_record_id','is_user_override']) then
+            return new;
+        end if;
+    end if;
+    if old.created_at < (analysis_day::timestamp at time zone 'Asia/Seoul')
+       and exists (select 1 from public.users where user_id=old.user_id) then
+        insert into private.health_analysis_invalidations(user_id,analysis_date)
+        values(old.user_id,analysis_day) on conflict do nothing;
+    end if;
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+end;
+$$;
+revoke all on function private.invalidate_health_analysis() from public,anon,authenticated;
