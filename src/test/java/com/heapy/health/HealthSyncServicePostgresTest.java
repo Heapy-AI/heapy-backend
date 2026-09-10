@@ -22,11 +22,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 
 /** 로컬 합성 DB에서 실제 JDBC·마이그레이션·원본 복원을 검증하고 전부 롤백한다. @author 김진우 */
-@EnabledIfEnvironmentVariable(named = "HEAPY_TEST_POSTGRES_URL", matches = "jdbc:postgresql://(localhost|127\\.0\\.0\\.1):[0-9]+/heapy_test")
+@EnabledIfEnvironmentVariable(named = "HEAPY_SYNC_TEST_POSTGRES_URL", matches = "jdbc:postgresql://(localhost|127\\.0\\.0\\.1):[0-9]+/heapy_sync_test")
 class HealthSyncServicePostgresTest {
     @Test void 동기화_재시도_과거버전_삭제_직접입력복원_소유자를_검증한다() throws Exception {
         try (var source = new HikariDataSource()) {
-            source.setJdbcUrl(System.getenv("HEAPY_TEST_POSTGRES_URL")); source.setUsername("postgres"); source.setPassword("postgres");
+            source.setJdbcUrl(System.getenv("HEAPY_SYNC_TEST_POSTGRES_URL")); source.setUsername("postgres"); source.setPassword("postgres");
             JdbcTemplate jdbc = new JdbcTemplate(source);
             String migration = Files.readString(Path.of("supabase/migrations/20260910055554_samsung_health_sync.sql"));
             new TransactionTemplate(new DataSourceTransactionManager(source)).executeWithoutResult(tx -> {
