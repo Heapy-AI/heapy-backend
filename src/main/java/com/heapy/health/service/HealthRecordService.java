@@ -111,7 +111,10 @@ public class HealthRecordService {
         int restored = jdbc.update("""
                 update public.lifestyle_water_intake w set source='samsung_health',is_user_override=false,
                 consumed_at=(o.original_values->>'consumed_at')::timestamptz,
-                amount_ml=(o.original_values->>'amount_ml')::numeric,updated_at=clock_timestamp()
+                amount_ml=(o.original_values->>'amount_ml')::numeric,
+                external_record_id=o.original_values->>'external_record_id',
+                source_updated_at=(o.original_values->>'source_updated_at')::timestamptz,
+                sync_run_id=(o.original_values->>'sync_run_id')::uuid,updated_at=clock_timestamp()
                 from private.water_record_origins o where w.water_intake_id=o.record_id and w.user_id=o.user_id
                 and w.user_id=? and w.water_intake_id=?
                 """, user, id);
