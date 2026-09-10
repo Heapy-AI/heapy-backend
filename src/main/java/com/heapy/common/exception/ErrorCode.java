@@ -3,6 +3,8 @@ package com.heapy.common.exception;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
+    HEALTH_SYNC_LIMIT(HttpStatus.PAYLOAD_TOO_LARGE, "HEALTH-009", "동기화 배치는 1MiB 이하로 나눠 전송해 주세요."),
+    HEALTH_SYNC_PERMISSION(HttpStatus.FORBIDDEN, "HEALTH-008", "삼성헬스의 11개 읽기 권한을 확인해 주세요."),
     HEALTH_READ_ONLY(HttpStatus.FORBIDDEN, "HEALTH-005", "앱에서 직접 추가한 물 기록만 수정·삭제할 수 있습니다."),
     HEALTH_RECORD_CONFLICT(HttpStatus.CONFLICT, "HEALTH-006", "기록이 변경되었거나 같은 시각의 기록이 있습니다. 새로고침해 주세요."),
     HEALTH_ORIGIN_REQUIRED(HttpStatus.CONFLICT, "HEALTH-007", "삼성헬스 원본을 다시 동기화한 뒤 변경해 주세요."),
