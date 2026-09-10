@@ -5,6 +5,13 @@ spring:
       max-request-size: 21000000B
   application:
     name: heapy-backend
+  data:
+    redis:
+      host: ${HEALTH_REDIS_HOST:localhost}
+      port: ${HEALTH_REDIS_PORT:6379}
+      password: ${HEALTH_REDIS_PASSWORD:}
+      connect-timeout: 2s
+      timeout: 2s
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/postgres}
     username: ${DATABASE_USERNAME:postgres}
@@ -25,6 +32,9 @@ spring:
           jws-algorithms: ES256
 
 heapy:
+  health:
+    analysis:
+      enabled: ${HEALTH_ANALYSIS_ENABLED:false}
   chat:
     enabled: ${CHAT_ENABLED:false}
     base-url: ${CHAT_BASE_URL:http://heapy-fastapi:8000}
@@ -41,6 +51,9 @@ heapy:
     signup-redirect-url: ${SUPABASE_SIGNUP_REDIRECT_URL:heapy://auth/callback}
 
 management:
+  health:
+    redis:
+      enabled: ${HEALTH_ANALYSIS_ENABLED:false}
   endpoints:
     web:
       exposure:
