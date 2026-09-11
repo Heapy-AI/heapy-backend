@@ -88,7 +88,7 @@ class HealthConnectionServiceTest {
     void 생성_갱신_부분권한_조회와_사용자격리를_검증한다() {
         SaveResult created = save(user, UUID.randomUUID(), request(List.of("steps"), 0));
         assertThat(created.status()).isEqualTo(201);
-        assertThat(created.connection().status()).isEqualTo("connected");
+        assertThat(created.connection().status()).isEqualTo("permission_required");
         assertThat(created.connection().grantedDataTypes()).containsExactly("steps");
         SaveResult updated = save(user, UUID.randomUUID(), request(List.of("steps", "sleep"), 1));
         assertThat(updated.status()).isEqualTo(200);
@@ -105,6 +105,22 @@ class HealthConnectionServiceTest {
         SaveResult result = save(user, UUID.randomUUID(), request(types, 0));
         assertThat(result.connection().grantedDataTypes()).containsExactlyInAnyOrderElementsOf(types);
         assertThat(result.connection().status()).isEqualTo("connected");
+    }
+
+    @Test
+    void 기존_부분권한_연결행은_조회에서_권한필요로_보이고_원본은_유지한다() {
+        save(user, UUID.randomUUID(), request(List.of("steps"), 0));
+        jdbc.update("update public.health_data_connections set status='connected' where user_id=?", user);
+        assertThat(service.findAll(user).getFirst().status()).isEqualTo("permission_required");
+        assertThat(repository.findAll(user).getFirst().status()).isEqualTo("connected");
+    }
+
+    @Test
+    void 하나라도_빠진_권한은_연결완료가_아니다() {
+        List<String> types = List.of("sleep", "heart_rate", "blood_glucose", "blood_pressure",
+                "body_composition", "exercise", "floors", "steps", "activity", "water");
+        assertThat(save(user, UUID.randomUUID(), request(types, 0)).connection().status())
+                .isEqualTo("permission_required");
     }
 
     @Test

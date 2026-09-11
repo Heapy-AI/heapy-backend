@@ -67,7 +67,8 @@ public class GlobalExceptionHandler {
         List<FieldErrorResponse> errors = exception.getBindingResult().getFieldErrors().stream()
                 .map(error -> new FieldErrorResponse(
                         error.getField(),
-                        request.getRequestURI().startsWith("/api/checkups") ? "[REDACTED]"
+                        (request.getRequestURI().startsWith("/api/checkups")
+                                || request.getRequestURI().startsWith("/api/chat")) ? "[REDACTED]"
                                 : redactRejectedValue(error.getField(), error.getRejectedValue()),
                         error.getDefaultMessage()
                 ))

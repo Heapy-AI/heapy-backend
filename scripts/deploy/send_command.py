@@ -9,6 +9,17 @@ import subprocess
 import time
 from pathlib import Path
 
+FILES = ('deploy.sh', 'validate_env.py', 'diagnostics.py',
+         'heapy-deploy-diagnostics-prune.service', 'heapy-deploy-diagnostics-prune.timer')
+
+
+def safe_diagnostics(output):
+    """자유 형식 오류 원문 대신 고정 문법을 만족하는 진단 행만 공개한다."""
+    pattern = (r'HEAPY_DIAG (?:snapshot=(?:saved|failed)|stage=(?:rename_previous|'
+               r'stop_previous|start_new|check_health) http=\d{3} curl=\d{1,3} '
+               r'health=(?:UP|DOWN|OUT_OF_SERVICE|UNKNOWN|INVALID|UNTESTED))')
+    return [line for line in output.splitlines() if re.fullmatch(pattern, line)][:10]
+
 
 def aws(*args):
     result = subprocess.run(
@@ -25,9 +36,10 @@ def parameters(image):
         raise ValueError("허용된 저장소의 이미지 다이제스트가 필요합니다.")
     commands = [
         "set -eu", "umask 077", "deploy_dir=$(mktemp -d /run/heapy-deploy.XXXXXX)",
-        "trap 'rm -f -- \"$deploy_dir/deploy.sh\" \"$deploy_dir/validate_env.py\"; rmdir -- \"$deploy_dir\"' EXIT",
     ]
-    for name in ("deploy.sh", "validate_env.py"):
+    targets = ' '.join(f'"$deploy_dir/{name}"' for name in FILES)
+    commands.append(f"trap 'rm -f -- {targets}; rmdir -- \"$deploy_dir\"' EXIT")
+    for name in FILES:
         payload = base64.b64encode(Path(__file__).with_name(name).read_bytes()).decode()
         commands.append(f"printf '%s' '{payload}' | base64 -d > \"$deploy_dir/{name}\"")
     commands.append(f'timeout --signal=TERM 900 bash "$deploy_dir/deploy.sh" {shlex.quote(image)} ap-northeast-2')
@@ -60,6 +72,9 @@ def main():
             print("EC2 배포 및 헬스 체크 성공.")
             return
         if status not in {"Pending", "InProgress", "Delayed", "Cancelling"}:
+            for line in safe_diagnostics(invocation.get('StandardOutputContent', '') + '\n' +
+                                         invocation.get('StandardErrorContent', '')):
+                print(line, flush=True)
             # 서버 출력에는 민감한 정보가 있을 수 있어 Actions에 복제하지 않는다.
             raise RuntimeError(f"배포 실패({status}). SSM 명령 ID로 결과를 확인하세요.")
         time.sleep(5)

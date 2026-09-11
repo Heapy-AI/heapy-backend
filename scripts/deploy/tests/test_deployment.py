@@ -69,10 +69,15 @@ class RolloutTest(unittest.TestCase):
         self.assertIsNotNone(bash, "배포 검증에 Bash가 필요합니다.")
         script = r'''
 source scripts/deploy/deploy.sh
+exec 3>&2
 IMAGE=test-image
 calls=0
+capture_failure() {
+  echo "CAPTURE $STAGE $NEW_ATTEMPTED" >&2
+  [[ $SCENARIO != capture-fail ]]
+}
 docker() {
-  echo "DOCKER $*" >&2
+  echo "DOCKER $*" >&3
   if [[ $1 == container ]]; then
     if [[ $3 == heapy-backend-rollback ]]; then
       [[ $SCENARIO == leftover ]]; return
@@ -99,6 +104,9 @@ rollout
         result = self.execute("success")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("-p 127.0.0.1:8080:8080", result.stderr)
+        self.assertIn("SPRINGDOC_API_DOCS_ENABLED=true", result.stderr)
+        self.assertIn("SPRINGDOC_SWAGGER_UI_ENABLED=true", result.stderr)
+        self.assertIn("SERVER_FORWARD_HEADERS_STRATEGY=framework", result.stderr)
         self.assertIn("DOCKER rm heapy-backend-rollback", result.stderr)
         self.assertNotIn("DOCKER start", result.stderr)
 
@@ -115,6 +123,21 @@ rollout
         result = self.execute("rollback-fail")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("이전 컨테이너 복원 실패", result.stderr)
+
+    def test_failure_stage_and_capture_before_removal(self):
+        for scenario, stage, attempted in (("stop-fail", "stop_previous", "0"),
+                                           ("run-fail", "start_new", "1"),
+                                           ("health-fail", "check_health", "1")):
+            with self.subTest(scenario=scenario):
+                result = self.execute(scenario)
+                marker = f"CAPTURE {stage} {attempted}"
+                self.assertIn(marker, result.stderr)
+                self.assertLess(result.stderr.index(marker), result.stderr.index("DOCKER rm -f heapy-backend"))
+
+    def test_failed_capture_does_not_block_rollback(self):
+        result = self.execute("capture-fail")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("이전 컨테이너 복원 완료", result.stderr)
 
     def test_first_failure_has_no_fake_rollback(self):
         result = self.execute("first-fail")

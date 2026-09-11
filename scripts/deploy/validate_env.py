@@ -8,7 +8,8 @@ REQUIRED = {
     "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_JWT_ISSUER",
     "SUPABASE_JWK_SET_URI",
 }
-OPTIONAL = {"SUPABASE_JWT_AUDIENCE", "SUPABASE_SIGNUP_REDIRECT_URL"}
+OPTIONAL = {"SUPABASE_JWT_AUDIENCE", "SUPABASE_SIGNUP_REDIRECT_URL",
+            "CHAT_ENABLED", "CHAT_BASE_URL", "CHAT_INTERNAL_TOKEN"}
 
 
 def validate(path):
@@ -24,6 +25,12 @@ def validate(path):
         values[key] = value
     if REQUIRED - values.keys():
         raise ValueError("필수 환경변수가 누락됐습니다.")
+    if values.get("CHAT_ENABLED", "false") not in {"true", "false"}:
+        raise ValueError("챗봇 활성화 값은 true 또는 false여야 합니다.")
+    if "CHAT_BASE_URL" in values and values["CHAT_BASE_URL"] != "http://heapy-fastapi:8000":
+        raise ValueError("챗봇은 지정된 내부 컨테이너 주소만 사용합니다.")
+    if values.get("CHAT_ENABLED") == "true" and len(values.get("CHAT_INTERNAL_TOKEN", "")) < 32:
+        raise ValueError("챗봇 내부 인증 설정이 필요합니다.")
     if not values["DATABASE_URL"].startswith("jdbc:postgresql://"):
         raise ValueError("PostgreSQL JDBC 주소가 필요합니다.")
     base = values["SUPABASE_URL"].rstrip("/")

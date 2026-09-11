@@ -33,12 +33,14 @@ class CheckupControllerTest {
     private final UUID user = UUID.randomUUID();
     private final UUID record = UUID.randomUUID();
     private OcrRepository repository;
+    private CheckupHistoryService history;
     private MockMvc mvc;
 
     @BeforeEach
     void 준비() {
         repository = mock(OcrRepository.class);
-        mvc = MockMvcBuilders.standaloneSetup(new CheckupController(repository))
+        history = mock(CheckupHistoryService.class);
+        mvc = MockMvcBuilders.standaloneSetup(new CheckupController(repository, history))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setCustomArgumentResolvers(new HandlerMethodArgumentResolver() {
                     public boolean supportsParameter(MethodParameter parameter) { return parameter.getParameterType() == Jwt.class; }
@@ -47,6 +49,19 @@ class CheckupControllerTest {
                         return Jwt.withTokenValue("fixture").header("alg", "none").subject(user.toString()).build();
                     }
                 }).build();
+    }
+
+    @Test
+    void 목록은_배열과_공통_페이지정보로_반환한다() throws Exception {
+        when(history.list(user, 100, null)).thenReturn(new CheckupHistoryService.Page(
+                List.of(new CheckupHistoryService.RecordSummary(record, LocalDate.of(2026,8,12), "합성 기관", "ocr", 0, null)),
+                new CheckupHistoryService.PageMeta(null, false, 100)));
+        mvc.perform(get("/api/checkups").param("limit", "100")).andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.data[0].recordId").value(record.toString()))
+                .andExpect(jsonPath("$.data[0].resultCount").value(0))
+                .andExpect(jsonPath("$.meta.hasNext").value(false))
+                .andExpect(jsonPath("$.meta.limit").value(100));
     }
 
     @Test

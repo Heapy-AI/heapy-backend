@@ -27,7 +27,7 @@ public class HealthConnectionService {
 
     @Transactional(readOnly = true)
     public List<HealthConnectionResponse> findAll(UUID userId) {
-        return repository.findAll(userId);
+        return repository.findAll(userId).stream().map(SamsungPermissionPolicy::effective).toList();
     }
 
     @Transactional(timeout = 10)
@@ -46,7 +46,8 @@ public class HealthConnectionService {
         }
 
         Optional<HealthConnectionResponse> existing = repository.find(userId, request.deviceInstallationId());
-        String status = request.grantedDataTypes().isEmpty() ? "permission_required" : "connected";
+        String status = SamsungPermissionPolicy.complete(request.grantedDataTypes())
+                ? "connected" : "permission_required";
         SamsungConnectionRequest normalized = new SamsungConnectionRequest(request.deviceInstallationId(),
                 request.grantedDataTypes().stream().distinct().sorted().toList(),
                 request.sdkVersion(), request.permissionCheckedAt());
