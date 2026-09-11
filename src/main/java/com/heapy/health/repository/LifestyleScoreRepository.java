@@ -7,6 +7,8 @@ import com.heapy.health.model.LifestyleScore.Session;
 import com.heapy.health.model.LifestyleScore.Steps;
 import java.sql.Date;
 import java.sql.Timestamp;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -29,13 +31,13 @@ public class LifestyleScoreRepository {
         List<Steps> steps = jdbc.query("""
                 select record_date, max(steps) from public.lifestyle_activity
                 where user_id=? and record_date>=? and record_date<? group by record_date
-                """, (rs, row) -> new Steps(rs.getDate(1).toLocalDate(), rs.getObject(2, Double.class)),
+                """, (rs, row) -> new Steps(rs.getDate(1).toLocalDate(), nullableDouble(rs, 2)),
                 user, Date.valueOf(from), Date.valueOf(until));
         List<Bmi> bmi = jdbc.query("""
                 select measured_at,bmi_value from public.lifestyle_bio
                 where user_id=? and measured_at>=? and measured_at<? and bmi_value>0
                 order by measured_at,bio_id limit ?
-                """, (rs, row) -> new Bmi(rs.getTimestamp(1).toInstant(), rs.getObject(2, Double.class)),
+                """, (rs, row) -> new Bmi(rs.getTimestamp(1).toInstant(), nullableDouble(rs, 2)),
                 user, timestamp(period.from().minusDays(89)), timestamp(until), LIMIT + 1);
         return new Input(births.isEmpty() ? null : births.getFirst(), sleep, exercise, steps, bmi,
                 sleep.size() > LIMIT || exercise.size() > LIMIT || bmi.size() > LIMIT);
@@ -46,10 +48,15 @@ public class LifestyleScoreRepository {
         return jdbc.query("select start_at,end_at," + minutes + " from public." + table
                         + " where user_id=? and start_at>=? and start_at<? and end_at>=? and end_at<? order by end_at,start_at limit ?",
                 (rs, row) -> new Session(rs.getTimestamp(1) == null ? null : rs.getTimestamp(1).toInstant(),
-                        rs.getTimestamp(2).toInstant(), rs.getObject(3, Double.class)),
+                        rs.getTimestamp(2).toInstant(), nullableDouble(rs, 3)),
                 user, timestamp(from.minusDays(1)), timestamp(until), timestamp(from), timestamp(until), LIMIT + 1);
     }
     private static Timestamp timestamp(LocalDate day) {
         return Timestamp.from(day.atStartOfDay(HealthPeriod.ZONE).toInstant());
+    }
+    /** PostgreSQL integer·numeric를 변환하되 결측을 실제 0으로 바꾸지 않는다. @author 김진우 */
+    static Double nullableDouble(ResultSet rs, int column) throws SQLException {
+        double value = rs.getDouble(column);
+        return rs.wasNull() ? null : value;
     }
 }
