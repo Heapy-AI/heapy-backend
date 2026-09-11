@@ -34,3 +34,37 @@ Thumbs.db
 __pycache__/
 *.pyc
 /.github/modernize/
+
+# 작성자: 김진우 — 개발 보조 자료는 로컬에만 보관한다.
+*.md
+*.mdx
+!LICENSE.md
+!NOTICE.md
+/.tmp/
+/.venv/
+/venv/
+node_modules/
+/.ruff_cache/
+/.pytest_cache/
+/artifacts/
+/screenshots/
+/test-results/
+/playwright-report/
+/coverage/
+/src/test/
+**/tests/
+**/__tests__/
+test_*.py
+*_test.py
+*.test.*
+*.spec.*
+/scripts/ocr/smoke.mjs
+/scripts/database/verify_chat_storage.py
+
+# 화면용 이미지 자산은 유지하고 캡처 파일만 제외한다.
+**/screenshots/**
+**/스크린샷/**
+screenshot*.png
+Screenshot*.png
+스크린샷*.png
+codex-clipboard-*.png

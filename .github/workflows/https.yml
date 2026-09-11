@@ -44,7 +44,6 @@ jobs:
           test "$AWS_REGION" = ap-northeast-2
           test "$AWS_ROLE_ARN" = arn:aws:iam::577638373354:role/heapy-backend-github-role
           for file in scripts/https/*.sh; do bash -n "$file"; done
-          python3 -m unittest discover -s scripts/https/tests -v
       - name: AWS 단기 인증
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:

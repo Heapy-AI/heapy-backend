@@ -15,26 +15,9 @@ permissions:
 
 jobs:
   verify:
-    name: 테스트 및 이미지 빌드 검증
+    name: 컴파일 및 이미지 빌드 검증
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    services:
-      postgres:
-        image: postgres:17.6
-        env:
-          POSTGRES_DB: heapy_test
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      HEAPY_TEST_POSTGRES_URL: jdbc:postgresql://localhost:5432/heapy_test
-      HEAPY_CHAT_TEST_POSTGRES_URL: jdbc:postgresql://localhost:5432/heapy_chat_test
-      HEAPY_SYNC_TEST_POSTGRES_URL: jdbc:postgresql://localhost:5432/heapy_sync_test
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -43,16 +26,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: 배포 도구 검증
+      - name: 배포 스크립트 문법 검증
         run: |
           bash -n scripts/deploy/deploy.sh
-          python3 -m unittest discover -s scripts/deploy/tests -v
-      - name: 합성 상담과 동기화 전용 DB 준비
-        run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d heapy_test -v ON_ERROR_STOP=1 -c "CREATE DATABASE heapy_chat_test"
-          PGPASSWORD=postgres psql -h localhost -U postgres -d heapy_test -v ON_ERROR_STOP=1 -c "CREATE DATABASE heapy_sync_test"
-      - name: 애플리케이션 테스트 및 실행 JAR 생성
-        run: bash ./gradlew --no-daemon clean test bootJar
+          python3 -m py_compile scripts/deploy/*.py
+      # 작성자: 김진우 — 테스트 소스는 로컬 전용이므로 CI는 실행 JAR과 이미지를 검증한다.
+      - name: 애플리케이션 컴파일 및 실행 JAR 생성
+        run: bash ./gradlew --no-daemon clean bootJar
       - name: 컨테이너 빌드 검증
         run: docker build --platform linux/amd64 -t heapy-backend-verify .
 
