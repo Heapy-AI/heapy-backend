@@ -3,6 +3,7 @@ package com.heapy.common.exception;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
+    MEDICATION_CONFLICT(HttpStatus.CONFLICT, "MEDICATION-001", "이미 처리한 복약 일정이거나 변경할 수 없는 약입니다. 새로고침해 주세요."),
     HEALTH_SYNC_LIMIT(HttpStatus.PAYLOAD_TOO_LARGE, "HEALTH-009", "동기화 배치는 1MiB 이하로 나눠 전송해 주세요."),
     HEALTH_SYNC_PERMISSION(HttpStatus.FORBIDDEN, "HEALTH-008", "삼성헬스의 11개 읽기 권한을 확인해 주세요."),
     HEALTH_READ_ONLY(HttpStatus.FORBIDDEN, "HEALTH-005", "앱에서 직접 추가한 물 기록만 수정·삭제할 수 있습니다."),

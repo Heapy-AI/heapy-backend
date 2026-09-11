@@ -48,6 +48,11 @@ public class OcrService {
     }
 
     public JobResponse upload(UUID user, UUID key, String inputType, MultipartFile file) {
+        return upload(user, key, inputType, file, "health_checkup");
+    }
+
+    public JobResponse upload(UUID user, UUID key, String inputType, MultipartFile file, String documentType) {
+        if (!Set.of("health_checkup", "medication").contains(documentType)) throw new HeapyException(ErrorCode.INVALID_INPUT);
         if (!properties.enabled()) throw new HeapyException(ErrorCode.OCR_UNAVAILABLE);
         if (!Set.of("camera", "image", "pdf").contains(inputType)) throw new HeapyException(ErrorCode.INVALID_INPUT);
         byte[] bytes;
@@ -60,22 +65,23 @@ public class OcrService {
         if (("pdf".equals(extension)) != ("pdf".equals(inputType))) throw new HeapyException(ErrorCode.OCR_UNSUPPORTED_FILE);
         String sourceHash = OcrJson.hash(bytes);
         String hash = OcrJson.hash(OcrJson.encode(Map.of("inputType", inputType, "sha256", sourceHash)));
+        final String requestHash = "medication".equals(documentType) ? OcrJson.hash("medication:" + hash) : hash;
         try {
             return transaction.execute(status -> {
                 if (!repository.lockUser(user)) throw new HeapyException(ErrorCode.RESOURCE_NOT_FOUND);
                 var receipt = repository.receipt(user, "upload", key);
                 if (receipt.isPresent()) {
-                    if (!receipt.get().hash().equals(hash)) throw new HeapyException(ErrorCode.IDEMPOTENCY_KEY_REUSED);
+                    if (!receipt.get().hash().equals(requestHash)) throw new HeapyException(ErrorCode.IDEMPOTENCY_KEY_REUSED);
                     return OcrJson.MAPPER.readValue(receipt.get().response(), JobResponse.class);
                 }
                 if (repository.activeCount(user) >= 2) throw new HeapyException(ErrorCode.OCR_UNAVAILABLE);
                 Instant now = clock.instant().truncatedTo(ChronoUnit.MILLIS);
                 Job job = new Job(UUID.randomUUID(), user, inputType, "pending", null, null,
-                        now, now.plusSeconds(600), extension, bytes.length, sourceHash);
+                        now, now.plusSeconds(600), extension, bytes.length, sourceHash, documentType);
                 gateway.prepare(job, bytes);
                 repository.insert(job, key);
                 JobResponse response = response(job, null);
-                repository.saveReceipt(job, "upload", key, hash, response);
+                repository.saveReceipt(job, "upload", key, requestHash, response);
                 return response;
             });
         } catch (SdkException exception) { throw new HeapyException(ErrorCode.OCR_UNAVAILABLE); }
@@ -83,15 +89,19 @@ public class OcrService {
     }
 
     public JobResponse get(UUID user, UUID id) {
-        Job job = owned(user, id);
+        return get(user, id, "health_checkup");
+    }
+
+    public JobResponse get(UUID user, UUID id, String documentType) {
+        Job job = owned(user, id, documentType);
         requireActive(job);
         if ("failed".equals(job.status())) return response(job, null);
         Snapshot snapshot = read(job);
         return transaction.execute(status -> {
             repository.lockJob(user, id);
-            requireActive(owned(user, id));
+            requireActive(owned(user, id, documentType));
             repository.progress(job, snapshot, publicError(snapshot.errorCode()));
-            Job latest = owned(user, id);
+            Job latest = owned(user, id, documentType);
             requireActive(latest);
             if (!clock.instant().isBefore(latest.expiresAt())) throw new HeapyException(ErrorCode.OCR_EXPIRED);
             return response(latest, "review".equals(latest.status()) ? snapshot : null);
@@ -130,16 +140,18 @@ public class OcrService {
         return confirmed;
     }
 
-    public void cancel(UUID user, UUID id) {
+    public void cancel(UUID user, UUID id) { cancel(user, id, "health_checkup"); }
+
+    public void cancel(UUID user, UUID id, String documentType) {
         transaction.executeWithoutResult(status -> {
             repository.lockJob(user, id);
-            Job job = owned(user, id);
+            Job job = owned(user, id, documentType);
             if (!"confirmed".equals(job.status())) repository.close(job, "expired");
         });
-        cleanup(owned(user, id));
+        cleanup(owned(user, id, documentType));
     }
 
-    void cleanup(Job job) {
+    public void cleanup(Job job) {
         try {
             gateway.purge(job, "confirmed".equals(job.status()) ? "confirmed" : "cancelled");
             repository.cleanupDone(job.id());
@@ -153,7 +165,7 @@ public class OcrService {
     private Snapshot read(Job job) {
         try {
             Snapshot snapshot = gateway.read(job);
-            if ("completed".equals(snapshot.status())) OcrReviewValidator.validateSnapshot(snapshot.result());
+            if ("completed".equals(snapshot.status()) && "health_checkup".equals(job.documentType())) OcrReviewValidator.validateSnapshot(snapshot.result());
             return snapshot;
         }
         catch (SdkException exception) { throw new HeapyException(ErrorCode.OCR_UNAVAILABLE); }
@@ -199,7 +211,11 @@ public class OcrService {
     }
 
     private Job owned(UUID user, UUID id) {
-        return repository.owned(user, id).orElseThrow(() -> new HeapyException(ErrorCode.RESOURCE_NOT_FOUND));
+        return owned(user, id, "health_checkup");
+    }
+
+    private Job owned(UUID user, UUID id, String documentType) {
+        return repository.owned(user, id, documentType).orElseThrow(() -> new HeapyException(ErrorCode.RESOURCE_NOT_FOUND));
     }
 
     private void requireActive(Job job) {
@@ -209,7 +225,7 @@ public class OcrService {
     }
 
     private JobResponse response(Job job, Snapshot snapshot) {
-        return new JobResponse(job.id(), "health_checkup", "review".equals(job.status()) ? "completed" : job.status(),
+        return new JobResponse(job.id(), job.documentType(), "review".equals(job.status()) ? "completed" : job.status(),
                 job.pageCount(), job.expiresAt(), 2500, snapshot == null ? null : snapshot.result(), job.errorCode());
     }
 

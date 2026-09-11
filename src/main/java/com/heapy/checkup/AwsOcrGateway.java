@@ -49,7 +49,7 @@ public class AwsOcrGateway implements OcrGateway {
 
     Map<String, Object> request(Job job) {
         return Map.of("contractVersion", "1.0", "jobId", job.id().toString(),
-                "documentType", "health_checkup", "inputType", job.inputType(),
+                "documentType", job.documentType(), "inputType", job.inputType(),
                 "createdAt", job.createdAt().toString(), "expiresAt", job.expiresAt().toString(),
                 "source", Map.of("bucket", properties.bucket(), "key", "originals/" + job.id() + "/source",
                         "extension", job.extension(), "sizeBytes", job.sourceSize(), "sha256", job.sourceHash()));
