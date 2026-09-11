@@ -41,8 +41,12 @@ public class OcrRepository {
     }
 
     public Optional<Job> owned(UUID user, UUID job) {
-        return jdbc.query(JOB_SELECT + " where j.user_id = ? and j.job_id = ? and j.document_type = 'health_checkup'",
-                this::map, user, job).stream().findFirst();
+        return owned(user, job, "health_checkup");
+    }
+
+    public Optional<Job> owned(UUID user, UUID job, String documentType) {
+        return jdbc.query(JOB_SELECT + " where j.user_id = ? and j.job_id = ? and j.document_type = ?",
+                this::map, user, job, documentType).stream().findFirst();
     }
 
     public Optional<Receipt> receipt(UUID user, String operation, UUID key) {
@@ -64,8 +68,8 @@ public class OcrRepository {
         jdbc.update("""
                 insert into public.ocr_jobs (job_id,user_id,document_type,input_type,status,
                 idempotency_key,created_at,updated_at,expires_at)
-                values (?,?,'health_checkup',?,'pending',?,?,?,?)
-                """, job.id(), job.userId(), "camera".equals(job.inputType()) ? "image" : job.inputType(),
+                values (?,?,?,?,'pending',?,?,?,?)
+                """, job.id(), job.userId(), job.documentType(), "camera".equals(job.inputType()) ? "image" : job.inputType(),
                 key, Timestamp.from(job.createdAt()), Timestamp.from(job.createdAt()), Timestamp.from(job.expiresAt()));
     }
 
@@ -112,7 +116,7 @@ public class OcrRepository {
 
     public List<Job> pending() {
         return jdbc.query(JOB_SELECT + """
-                where j.document_type = 'health_checkup' and j.status in ('pending','processing')
+                where j.document_type in ('health_checkup','medication') and j.status in ('pending','processing')
                 and j.expires_at > current_timestamp order by j.created_at limit 8
                 """, this::map);
     }
@@ -134,7 +138,7 @@ public class OcrRepository {
     public void expire() {
         jdbc.update("""
                 update public.ocr_jobs set status = 'expired', updated_at = current_timestamp
-                where document_type = 'health_checkup' and status in ('pending','processing','review')
+                where document_type in ('health_checkup','medication') and status in ('pending','processing','review')
                 and expires_at <= current_timestamp
                 """);
     }
@@ -221,6 +225,6 @@ public class OcrRepository {
         return new Job(rs.getObject("job_id", UUID.class), rs.getObject("user_id", UUID.class),
                 rs.getString("source_input_type"), rs.getString("status"), (Integer) rs.getObject("page_count", Integer.class),
                 rs.getString("error_code"), rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("expires_at").toInstant(),
-                rs.getString("source_extension"), rs.getLong("source_size"), rs.getString("source_hash"));
+                rs.getString("source_extension"), rs.getLong("source_size"), rs.getString("source_hash"), rs.getString("document_type"));
     }
 }

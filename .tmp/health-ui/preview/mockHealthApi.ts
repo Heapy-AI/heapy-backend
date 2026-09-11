@@ -1,0 +1,28 @@
+// 작성자: 김진우 — 브라우저 미리보기 전용 합성 기록이다. 실제 건강 데이터·네트워크를 사용하지 않는다.
+import type {healthApi as live} from '../src/features/health/healthApi';
+import type {HealthPage,HealthRecord,Metric,Series} from '../src/features/health/types';
+import {bucket,koreanDay} from '../src/features/health/healthModel';
+const today=koreanDay();
+const records:Record<Metric,HealthRecord[]>={bio:[],activity:[],exercise:[],nutrition:[],water:[],sleep:[]};
+const fields:Record<Metric,Record<string,[string,string,boolean]>>={bio:{heart_rate_bpm:['심박수','bpm',false],weight_kg:['체중','kg',false],bmi_value:['BMI','kg/m²',false],systolic_mmhg:['수축기 혈압','mmHg',false],diastolic_mmhg:['이완기 혈압','mmHg',false],glucose_fasting:['공복 혈당','mg/dL',false]},activity:{steps:['걸음 수','걸음',true],active_calories_kcal:['활동 열량','kcal',true]},exercise:{duration_seconds:['운동시간','초',true],calories_kcal:['운동 열량','kcal',true]},nutrition:{calories:['섭취 열량','kcal',true],carbohydrate:['탄수화물','g',true],protein:['단백질','g',true],total_fat:['지방','g',true]},water:{amount_ml:['물 섭취','mL',true]},sleep:{total_sleep_minutes:['수면시간','분',true],deep_sleep_minutes:['깊은 수면','분',true],light_sleep_minutes:['얕은 수면','분',true],rem_sleep_minutes:['REM 수면','분',true],awake_minutes:['깨어 있음','분',true],sleep_score:['수면점수','점',false]}};
+for(let i=0;i<35;i++){
+ const date=new Date(new Date(today+'T00:00:00Z').getTime()-i*86400000).toISOString().slice(0,10);
+ const values:Record<Metric,HealthRecord['values']>={bio:{heart_rate_bpm:68+i%8,weight_kg:62+i/20,bmi_value:22+i/100,systolic_mmhg:115+i%12,diastolic_mmhg:75+i%5,glucose_fasting:90+i%10,blood_glucose_mg_dl:90+i%10,is_fasting:true},activity:{steps:5100+i%7*600,active_calories_kcal:380+i%6*20},exercise:{duration_seconds:1800+i%5*300,calories_kcal:200+i%4*20,exercise_type:i%2?'걷기':'달리기'},nutrition:{calories:1700+i%4*90,carbohydrate:210,protein:70+i%4*5,total_fat:55,meal_type:'점심',title:'합성 식사 기록'},water:{amount_ml:250},sleep:{total_sleep_minutes:390+i%6*10,deep_sleep_minutes:85,light_sleep_minutes:205+i%6*10,rem_sleep_minutes:100,awake_minutes:15,sleep_score:80+i%5}};
+ for(const metric of Object.keys(records) as Metric[]){const stamp=date+'T00:00:00Z';records[metric].push({recordId:metric+'-'+i,date,measuredAt:stamp,source:i%3?'samsung_health':'manual',editable:metric==='water'&&i%3===0,deletable:metric==='water'&&i%3===0,recordVersion:stamp,values:values[metric]});}
+}
+records.water.unshift({...records.water[0]!,recordId:'water-read-only',source:'samsung_health',editable:false,deletable:false,values:{amount_ml:500}});
+const requests=new Map<string,unknown>();
+export const healthApi:typeof live={
+ async page(metric,period,_signal,params={}){
+  if(new URLSearchParams(location.search).get('healthState')==='error')throw new Error('합성 네트워크 오류');
+  const to=String(params.baseDate??today),days={ '7d':7,'30d':30,'90d':90,'180d':180,'1y':365 }[period],from=new Date(new Date(to+'T00:00:00Z').getTime()-(days-1)*86400000).toISOString().slice(0,10);
+  const aggregation=(params.aggregation??(days>=180?'month':days>=90?'week':'day')) as HealthPage['period']['aggregation'];
+  const rows=new URLSearchParams(location.search).get('healthState')==='empty'?[]:records[metric].filter(r=>r.date>=from&&r.date<=to).sort((a,b)=>b.measuredAt.localeCompare(a.measuredAt));
+  const output:Series[]=Object.entries(fields[metric]).map(([key,[label,unit,sum]])=>{const daily=new Map<string,number[]>();rows.forEach(r=>{const value=r.values[key];if(typeof value==='number')daily.set(r.date,[...(daily.get(r.date)??[]),value]);});const grouped=new Map<string,number[]>();daily.forEach((v,d)=>{const k=bucket(d,aggregation);grouped.set(k,[...(grouped.get(k)??[]),v.reduce((a,b)=>a+b,0)/(sum?1:v.length)]);});return {key,label,unit,dailyAggregation:sum?'sum':'mean',points:[...grouped].sort().map(([date,v])=>({date,value:v.reduce((a,b)=>a+b,0)/v.length,recordedDays:v.length,spanDays:aggregation==='week'?7:aggregation==='month'?30:1,coveredDays:v.length}))};});
+  return {metric,period:{code:period,from,to,aggregation},timezone:'Asia/Seoul',records:rows,series:output,dataTruncated:false,nextCursor:null};
+ },
+ async analysis(category){return {category,analysisDate:today,cutoff:today+'T00:00:00+09:00',expiresAt:new Date(new Date(today+'T00:00:00+09:00').getTime()+86400000).toISOString(),status:'generated',report:{headline:'생활 리듬과 기록의 변화를 함께 살펴봐요',current_state:'브라우저 화면 검증용 합성 분석입니다. 실제 건강 분석 결과가 아닙니다.'}};},
+ async create(metric,body,key){if(requests.has(key))return requests.get(key);const measuredAt=String(body.consumedAt??body.measuredAt??body.startAt);const values:HealthRecord['values']=metric==='water'?{amount_ml:Number(body.amountMl)}:metric==='sleep'?{total_sleep_minutes:Number(body.totalSleepMinutes)}:{};records[metric].unshift({recordId:'added-'+key,date:koreanDay(new Date(measuredAt)),measuredAt,source:'manual',editable:metric==='water',deletable:metric==='water',recordVersion:new Date().toISOString(),values});const result={recordId:'added-'+key};requests.set(key,result);return result;},
+ async editWater(record,body,key){if(requests.has(key))return requests.get(key);const row=records.water.find(r=>r.recordId===record.recordId);if(!row?.editable)throw new Error('앱 기록만 수정할 수 있어요.');row.measuredAt=String(body.consumedAt);row.date=koreanDay(new Date(row.measuredAt));row.values.amount_ml=Number(body.amountMl);row.recordVersion=new Date().toISOString();requests.set(key,{});return {};},
+ async deleteWater(selected,key){if(requests.has(key))return requests.get(key);if(selected.some(r=>!r.deletable))throw new Error('앱 기록만 삭제할 수 있어요.');records.water=records.water.filter(r=>!selected.some(s=>s.recordId===r.recordId));requests.set(key,{});return {};},
+};

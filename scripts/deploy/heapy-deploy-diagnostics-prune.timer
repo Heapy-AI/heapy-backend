@@ -1,0 +1,10 @@
+# 작성자: 김진우
+[Unit]
+Description=HEAPY 배포 진단 일일 정리
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

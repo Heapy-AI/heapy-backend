@@ -7,12 +7,35 @@ BACKUP=heapy-backend-rollback
 ENV_FILE=/opt/heapy/backend.env
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 HEALTH_ATTEMPTS=60
+STAGE=rename_previous
+HEALTH_HTTP=000
+HEALTH_CURL=0
+HEALTH_STATE=UNTESTED
+
+capture_failure() {
+  echo "HEAPY_DIAG stage=$STAGE http=$HEALTH_HTTP curl=$HEALTH_CURL health=$HEALTH_STATE" >&2
+  timeout 12 python3 "$SCRIPT_DIR/diagnostics.py" capture "$STAGE" "$HEALTH_HTTP" \
+    "$HEALTH_CURL" "$HEALTH_STATE" "${NEW_ATTEMPTED:-0}" || echo 'HEAPY_DIAG snapshot=failed' >&2
+}
 
 healthy() {
-  local attempt
+  local attempt response body
   for ((attempt=0; attempt<HEALTH_ATTEMPTS; attempt++)); do
-    if curl --fail --silent --max-time 3 http://127.0.0.1:8080/actuator/health |
-      python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("status") == "UP" else 1)' 2>/dev/null; then
+    HEALTH_CURL=0
+    response=$(curl --silent --max-time 3 --max-filesize 65536 -w $'\n%{http_code}' \
+      http://127.0.0.1:8080/actuator/health) || HEALTH_CURL=$?
+    HEALTH_HTTP=${response##*$'\n'}
+    [[ $HEALTH_HTTP =~ ^[0-9]{3}$ ]] || HEALTH_HTTP=000
+    body=${response%$'\n'*}
+    HEALTH_STATE=$(printf '%s' "$body" | python3 -c '
+import json,sys
+try:
+    value=json.load(sys.stdin).get("status")
+    print(value if value in {"UP", "DOWN", "OUT_OF_SERVICE", "UNKNOWN"} else "INVALID")
+except (ValueError, AttributeError):
+    print("INVALID")
+' 2>/dev/null) || HEALTH_STATE=INVALID
+    if [[ $HEALTH_CURL == 0 && $HEALTH_HTTP == 200 && $HEALTH_STATE == UP ]]; then
       return 0
     fi
     sleep 2
@@ -24,6 +47,8 @@ rollback() {
   local code=$?
   trap - EXIT INT TERM
   if [[ ${DEPLOYING:-0} == 1 ]]; then
+    # 진단 실패가 복원을 막지 않으며, 새 컨테이너 삭제 전에 상태를 수집한다.
+    capture_failure || true
     echo '새 버전 배포 실패: 복원을 시작합니다.' >&2
     docker rm -f "$APP" >/dev/null 2>&1 || true
     if [[ ${HAD_PREVIOUS:-0} == 1 ]]; then
@@ -43,6 +68,7 @@ rollback() {
 rollout() {
   HAD_PREVIOUS=0
   DEPLOYING=0
+  NEW_ATTEMPTED=0
   # 남은 복원 컨테이너는 자동 삭제하지 않고 운영자가 상태를 확인하게 한다.
   if docker container inspect "$BACKUP" >/dev/null 2>&1; then
     echo '이전 복원 컨테이너가 남아 있습니다. 상태 확인 후 다시 배포하세요.' >&2
@@ -52,13 +78,17 @@ rollout() {
   trap 'exit 130' INT
   trap 'exit 143' TERM
   if docker container inspect "$APP" >/dev/null 2>&1; then
+    STAGE=rename_previous
     docker rename "$APP" "$BACKUP"
     HAD_PREVIOUS=1
     DEPLOYING=1
+    STAGE=stop_previous
     docker stop --time 30 "$BACKUP" >/dev/null
   else
     DEPLOYING=1
   fi
+  STAGE=start_new
+  NEW_ATTEMPTED=1
   docker run -d --name "$APP" --restart unless-stopped \
     --network heapy-app \
     --user 10001:10001 --read-only --tmpfs /tmp:rw,nosuid,noexec,size=256m \
@@ -70,6 +100,7 @@ rollout() {
     -e SPRINGDOC_API_DOCS_ENABLED=true -e SPRINGDOC_SWAGGER_UI_ENABLED=true \
     -e SERVER_FORWARD_HEADERS_STRATEGY=framework \
     -p 127.0.0.1:8080:8080 "$IMAGE" >/dev/null
+  STAGE=check_health
   healthy
   DEPLOYING=0
   trap - EXIT INT TERM
@@ -85,7 +116,7 @@ main() {
   REGION=${2:?리전 필요}
   [[ $REGION == ap-northeast-2 ]] || return 1
   [[ $IMAGE =~ ^577638373354\.dkr\.ecr\.ap-northeast-2\.amazonaws\.com/heapy-backend@sha256:[a-f0-9]{64}$ ]] || return 1
-  for dependency in docker aws python3 curl flock; do command -v "$dependency" >/dev/null; done
+  for dependency in docker aws python3 curl flock timeout systemctl; do command -v "$dependency" >/dev/null; done
   exec 9>/run/lock/heapy-backend-deploy.lock
   flock -n 9 || { echo '다른 배포가 실행 중입니다.' >&2; return 1; }
   [[ -f $ENV_FILE && ! -L $ENV_FILE ]] || { echo '서버 환경 파일이 없습니다.' >&2; return 1; }
@@ -94,6 +125,22 @@ main() {
   docker info >/dev/null
   # 작성자: 김진우 — 내부 AI 연결을 다음 컨테이너 교체에서도 유지한다.
   docker network inspect heapy-app >/dev/null 2>&1 || docker network create heapy-app >/dev/null
+  # 이 설치는 승인된 실제 배포 실행 때만 수행된다. 진단 조회에서는 호출하지 않는다.
+  [[ ! -L /opt/heapy/deploy-diagnostics.py ]] || return 1
+  for unit in heapy-deploy-diagnostics-prune.service heapy-deploy-diagnostics-prune.timer; do
+    [[ ! -L /etc/systemd/system/$unit ]] || return 1
+    if [[ -e /etc/systemd/system/$unit ]]; then
+      cmp -s "$SCRIPT_DIR/$unit" "/etc/systemd/system/$unit" || {
+        echo '기존 진단 정리 설정이 달라 자동 덮어쓰기를 중단합니다.' >&2
+        return 1
+      }
+    fi
+  done
+  install -m 700 "$SCRIPT_DIR/diagnostics.py" /opt/heapy/deploy-diagnostics.py
+  install -m 644 "$SCRIPT_DIR/heapy-deploy-diagnostics-prune.service" /etc/systemd/system/heapy-deploy-diagnostics-prune.service
+  install -m 644 "$SCRIPT_DIR/heapy-deploy-diagnostics-prune.timer" /etc/systemd/system/heapy-deploy-diagnostics-prune.timer
+  systemctl daemon-reload
+  systemctl enable --now heapy-deploy-diagnostics-prune.timer >/dev/null
   # 기존 앱을 중단하기 전에 인증·다운로드를 완료한다.
   aws ecr get-login-password --region "$REGION" |
     docker login --username AWS --password-stdin "${IMAGE%%/*}" >/dev/null

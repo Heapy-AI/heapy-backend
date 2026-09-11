@@ -1,0 +1,9 @@
+# 작성자: 김진우
+[Unit]
+Description=HEAPY 배포 진단 보관 기간 및 용량 제한
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/heapy/deploy-diagnostics.py prune
+TimeoutStartSec=30
+UMask=0077

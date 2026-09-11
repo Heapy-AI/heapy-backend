@@ -17,7 +17,14 @@ public final class OcrModels {
 
     public record Job(UUID id, UUID userId, String inputType, String status, Integer pageCount,
             String errorCode, Instant createdAt, Instant expiresAt, String extension,
-            long sourceSize, String sourceHash) { }
+            long sourceSize, String sourceHash, String documentType) {
+        public Job(UUID id, UUID userId, String inputType, String status, Integer pageCount,
+                String errorCode, Instant createdAt, Instant expiresAt, String extension,
+                long sourceSize, String sourceHash) {
+            this(id, userId, inputType, status, pageCount, errorCode, createdAt, expiresAt,
+                    extension, sourceSize, sourceHash, "health_checkup");
+        }
+    }
     public record JobResponse(UUID jobId, String documentType, String status, Integer pageCount,
             Instant expiresAt, int pollAfterMs, JsonNode result, String errorCode) { }
     public record Snapshot(String status, Integer pageCount, JsonNode result, String errorCode) { }

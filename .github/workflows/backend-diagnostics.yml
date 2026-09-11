@@ -1,0 +1,38 @@
+name: 백엔드 읽기 전용 진단
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: github.repository == 'Heapy-AI/heapy-backend' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: heapy-backend-dev-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: 진단 코드 검증
+        run: |
+          test "$EC2_INSTANCE_ID" = i-055b8632e5b93fd96
+          python3 -m unittest discover -s scripts/deploy/tests -v
+      - name: AWS 단기 인증
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: arn:aws:iam::577638373354:role/heapy-backend-github-role
+          aws-region: ap-northeast-2
+          allowed-account-ids: '577638373354'
+          role-session-name: heapy-diagnostics-${{ github.run_id }}
+      - name: 서버 이벤트 및 현재 자원 조회
+        run: python3 scripts/deploy/inspect_server.py
