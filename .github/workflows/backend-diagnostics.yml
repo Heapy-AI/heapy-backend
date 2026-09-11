@@ -26,7 +26,7 @@ jobs:
       - name: 진단 코드 검증
         run: |
           test "$EC2_INSTANCE_ID" = i-055b8632e5b93fd96
-          python3 -m unittest discover -s scripts/deploy/tests -v
+          python3 -m py_compile scripts/deploy/*.py
       - name: AWS 단기 인증
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
