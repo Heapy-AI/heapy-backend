@@ -39,15 +39,18 @@ public class HomeService {
     private final UserRepository userRepository;
     private final UserHomeModuleRepository homeModuleRepository;
     private final HomeSummaryRepository summaryRepository;
+    private final HomeCards cards;
 
     public HomeService(
             UserRepository userRepository,
             UserHomeModuleRepository homeModuleRepository,
-            HomeSummaryRepository summaryRepository
+            HomeSummaryRepository summaryRepository,
+            HomeCards cards
     ) {
         this.userRepository = userRepository;
         this.homeModuleRepository = homeModuleRepository;
         this.summaryRepository = summaryRepository;
+        this.cards = cards;
     }
 
     @Transactional
@@ -63,19 +66,27 @@ public class HomeService {
             modules = createDefaultModules(userId);
         }
         HomeSummaryRepository.Summary summary = summaryRepository.find(userId);
-        boolean hasMetrics = summary != null && summary.hasData();
+        HomeCards.Data cardData = cards.find(userId);
+        LocalDate today = cardData == null ? LocalDate.now(SERVICE_ZONE) : cardData.date();
+        var missions = summaryRepository.missions(userId, today);
+        boolean hasMetrics = (summary != null && summary.hasData())
+                || (cardData != null && !cardData.metrics().isEmpty());
         List<HomeModuleResponse> moduleResponses = modules.stream()
                 .map(module -> new HomeModuleResponse(
                         module.getModuleCode(),
                         module.isVisible(),
                         module.getDisplayOrder(),
-                        "key_metrics".equals(module.getModuleCode()) && hasMetrics ? "ready" : "empty",
-                        "key_metrics".equals(module.getModuleCode()) && hasMetrics ? summary : null,
-                        "key_metrics".equals(module.getModuleCode()) && hasMetrics
+                        ("key_metrics".equals(module.getModuleCode()) && hasMetrics)
+                                || ("missions".equals(module.getModuleCode()) && !missions.isEmpty()) ? "ready" : "empty",
+                        "missions".equals(module.getModuleCode()) ? missions
+                                : "key_metrics".equals(module.getModuleCode()) && hasMetrics ? summary : null,
+                        (("key_metrics".equals(module.getModuleCode()) && hasMetrics)
+                                || ("missions".equals(module.getModuleCode()) && !missions.isEmpty()))
                                 ? null : EMPTY_ACTIONS.get(module.getModuleCode())
                 ))
                 .toList();
-        return new HomeResponse(LocalDate.now(SERVICE_ZONE), List.of(), moduleResponses);
+        return new HomeResponse(today, summaryRepository.alerts(userId), moduleResponses, user.getName(),
+                cardData, summary == null ? null : summary.latestCheckup(), missions);
     }
 
     private List<UserHomeModule> createDefaultModules(UUID userId) {
