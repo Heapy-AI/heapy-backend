@@ -4,6 +4,8 @@ import com.heapy.common.response.ApiResponse;
 import com.heapy.health.model.HealthData.Page;
 import com.heapy.health.service.HealthQueryService;
 import com.heapy.health.service.HealthSummaryService;
+import com.heapy.health.service.LifestyleScoreService;
+import com.heapy.health.model.LifestyleScore.Report;
 import com.heapy.security.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -28,7 +30,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class HealthController {
     private final HealthQueryService query;
     private final HealthSummaryService summary;
-    public HealthController(HealthQueryService query, HealthSummaryService summary) { this.query = query; this.summary = summary; }
+    private final LifestyleScoreService scores;
+    public HealthController(HealthQueryService query, HealthSummaryService summary, LifestyleScoreService scores) {
+        this.query = query; this.summary = summary; this.scores = scores;
+    }
+
+    @GetMapping("/score")
+    @Operation(summary = "HEAPY 생활습관 관리 점수와 일별 추이 조회")
+    public ResponseEntity<ApiResponse<Report>> score(@AuthenticationPrincipal Jwt jwt,
+            @RequestParam(defaultValue = "7d") String period, @RequestParam(required = false) LocalDate baseDate) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(ApiResponse.success(
+                scores.find(AuthenticatedUser.id(jwt), period, baseDate), "생활습관 관리 점수를 조회했습니다."));
+    }
 
     @GetMapping("/summary")
     @Operation(summary = "내 건강 통합 리포트의 기록과 연결 상태 조회")

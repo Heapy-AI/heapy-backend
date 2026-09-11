@@ -7,7 +7,6 @@ import com.heapy.health.repository.HealthConnectionRepository;
 import com.heapy.home.repository.HomeSummaryRepository;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -19,12 +18,14 @@ public class HealthSummaryService {
     private final HealthQueryService query;
     private final HealthConnectionRepository connections;
     private final HomeSummaryRepository home;
+    private final LifestyleScoreService scores;
 
-    public HealthSummaryService(HealthQueryService query, HealthConnectionRepository connections, HomeSummaryRepository home) {
-        this.query = query; this.connections = connections; this.home = home;
+    public HealthSummaryService(HealthQueryService query, HealthConnectionRepository connections, HomeSummaryRepository home,
+                                LifestyleScoreService scores) {
+        this.query = query; this.connections = connections; this.home = home; this.scores = scores;
     }
 
-    @Transactional(readOnly = true, timeout = 20)
+    @Transactional(timeout = 30)
     public Map<String, Object> find(UUID user, String period, LocalDate date) {
         Map<String, Object> result = new LinkedHashMap<>();
         Map<String, Page> domains = new LinkedHashMap<>();
@@ -36,7 +37,7 @@ public class HealthSummaryService {
         result.put("domains", domains);
         result.put("connections", connections.findAll(user).stream().map(SamsungPermissionPolicy::effective).toList());
         result.put("latestCheckup", home.find(user).latestCheckup());
-        result.put("score", Map.of("status", "policy_pending", "points", List.of()));
+        result.put("score", scores.find(user, "7d", null));
         return result;
     }
 }
