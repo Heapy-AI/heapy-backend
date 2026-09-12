@@ -4,6 +4,7 @@ import com.heapy.auth.client.SupabaseLogoutClient;
 import com.heapy.common.exception.ErrorCode;
 import com.heapy.common.exception.HeapyException;
 import com.heapy.security.AuthenticatedUser;
+import com.heapy.notification.DeviceTokenService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,9 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
 @SecurityRequirement(name = "bearerAuth")
 public class LogoutController {
     private final SupabaseLogoutClient client;
+    private final DeviceTokenService devices;
 
-    public LogoutController(SupabaseLogoutClient client) {
+    public LogoutController(SupabaseLogoutClient client, DeviceTokenService devices) {
         this.client = client;
+        this.devices = devices;
     }
 
     @PostMapping("/api/auth/logout")
@@ -33,8 +36,9 @@ public class LogoutController {
             @RequestHeader("Idempotency-Key") UUID requestKey,
             @RequestBody(required = false) String body
     ) {
-        AuthenticatedUser.id(jwt);
+        UUID user = AuthenticatedUser.id(jwt);
         if (body != null && !body.isBlank()) throw new HeapyException(ErrorCode.INVALID_INPUT);
+        devices.deactivateAll(user);
         client.logout(jwt.getTokenValue());
         return ResponseEntity.noContent().build();
     }

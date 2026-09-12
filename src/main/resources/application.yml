@@ -32,6 +32,9 @@ spring:
           jws-algorithms: ES256
 
 heapy:
+  push:
+    enabled: ${PUSH_ENABLED:false}
+    project-id: ${FIREBASE_PROJECT_ID:}
   health:
     analysis:
       enabled: ${HEALTH_ANALYSIS_ENABLED:false}

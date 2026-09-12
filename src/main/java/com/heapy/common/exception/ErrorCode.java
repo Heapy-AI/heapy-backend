@@ -19,6 +19,7 @@ public enum ErrorCode {
     OCR_REVIEW_VERSION(HttpStatus.CONFLICT, "OCR-006", "검수 형식이 다릅니다. 앱을 업데이트한 뒤 다시 확인해 주세요."),
     OCR_RESULT_LIMIT(HttpStatus.PAYLOAD_TOO_LARGE, "OCR-007", "검진 확정 내용의 크기 제한을 초과했습니다."),
     OCR_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI-001", "OCR 서비스에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요."),
+    PUSH_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "PUSH-001", "복약 알림 서버 설정이 아직 준비되지 않았어요."),
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "COMMON-001", "입력값이 올바르지 않습니다."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED", "지원하지 않는 요청 방식입니다."),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE", "지원하지 않는 요청 형식입니다."),

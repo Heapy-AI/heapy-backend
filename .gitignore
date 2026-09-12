@@ -13,6 +13,8 @@
 !.env.example
 application-secret.yml
 application-*.secret.yml
+**/*firebase-adminsdk*.json
+**/firebase-service-account.json
 
 # 빌드 산출물
 /.gradle/
