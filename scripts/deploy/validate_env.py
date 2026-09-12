@@ -1,6 +1,7 @@
 """배포 환경 파일을 값을 출력하지 않고 검증한다. 작성자: 김진우."""
 
 import sys
+import re
 from pathlib import Path
 
 REQUIRED = {
@@ -9,7 +10,8 @@ REQUIRED = {
     "SUPABASE_JWK_SET_URI",
 }
 OPTIONAL = {"SUPABASE_JWT_AUDIENCE", "SUPABASE_SIGNUP_REDIRECT_URL",
-            "CHAT_ENABLED", "CHAT_BASE_URL", "CHAT_INTERNAL_TOKEN"}
+            "CHAT_ENABLED", "CHAT_BASE_URL", "CHAT_INTERNAL_TOKEN",
+            "PUSH_ENABLED", "FIREBASE_PROJECT_ID", "GOOGLE_APPLICATION_CREDENTIALS"}
 
 
 def validate(path):
@@ -25,6 +27,13 @@ def validate(path):
         values[key] = value
     if REQUIRED - values.keys():
         raise ValueError("필수 환경변수가 누락됐습니다.")
+    if values.get("PUSH_ENABLED", "false") not in {"true", "false"}:
+        raise ValueError("푸시 활성화 값은 true 또는 false여야 합니다.")
+    if values.get("PUSH_ENABLED") == "true":
+        if not re.fullmatch(r"[a-z][a-z0-9-]{4,28}[a-z0-9]", values.get("FIREBASE_PROJECT_ID", "")):
+            raise ValueError("Firebase 프로젝트 ID가 필요합니다.")
+        if values.get("GOOGLE_APPLICATION_CREDENTIALS") != "/run/secrets/firebase-service-account.json":
+            raise ValueError("지정된 서버 전용 푸시 자격 증명 경로가 필요합니다.")
     if values.get("CHAT_ENABLED", "false") not in {"true", "false"}:
         raise ValueError("챗봇 활성화 값은 true 또는 false여야 합니다.")
     if "CHAT_BASE_URL" in values and values["CHAT_BASE_URL"] != "http://heapy-fastapi:8000":

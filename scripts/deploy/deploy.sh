@@ -89,7 +89,16 @@ rollout() {
   fi
   STAGE=start_new
   NEW_ATTEMPTED=1
+  # 작성자: 김진우 — 푸시 키는 이미지 밖에 보관하고 존재할 때만 읽기 전용으로 연결한다.
+  local push_mount=()
+  if [[ -f /opt/heapy/secrets/firebase-service-account.json ]]; then
+    push_mount=(--mount type=bind,src=/opt/heapy/secrets/firebase-service-account.json,dst=/run/secrets/firebase-service-account.json,readonly)
+  elif grep -q '^PUSH_ENABLED=true$' "$ENV_FILE"; then
+    echo '푸시 서비스 계정 파일이 없어 배포를 중단합니다.' >&2
+    return 1
+  fi
   docker run -d --name "$APP" --restart unless-stopped \
+    "${push_mount[@]}" \
     --network heapy-app \
     --user 10001:10001 --read-only --tmpfs /tmp:rw,nosuid,noexec,size=256m \
     --cap-drop ALL --security-opt no-new-privileges:true \
