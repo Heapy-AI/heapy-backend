@@ -80,7 +80,7 @@ public class MedicationService {
                 instructions=?,start_date=?,end_date=?,status=?,updated_at=? where medication_id=? and user_id=?
                 """, value(body,"displayName"),amount(body),value(body,"doseUnit"),value(body,"dosageText"),
                 value(body,"instructions"),date(body,"startDate"),date(body,"endDate"),state(body),now(),id,user);
-        removeFuture(user,id); schedules(id,body); generate(user);
+        removeFuture(user,id); schedules(id,body); removeReplacedToday(user,id); generate(user);
         return detail(user,id);
     }
 
@@ -93,6 +93,22 @@ public class MedicationService {
 
     private void removeFuture(UUID user, UUID id) {
         jdbc.update("delete from public.medication_intakes where user_id=? and medication_id=? and status='pending' and scheduled_at>?",user,id,now());
+    }
+
+    /** 오늘 시간이 지난 미복용 회차도 일정에서 제외됐다면 정리하고, 처리한 이력은 보존한다. @author 김진우 */
+    private void removeReplacedToday(UUID user, UUID id) {
+        jdbc.update("""
+                delete from public.medication_intakes i
+                where i.user_id=? and i.medication_id=? and i.status='pending'
+                and i.scheduled_at>=? and i.scheduled_at<?
+                and not exists(select 1 from public.medication_schedules s
+                join public.user_medications m on m.medication_id=s.medication_id
+                where s.medication_id=i.medication_id and s.is_active and m.status='active'
+                and s.scheduled_time=(i.scheduled_at at time zone 'Asia/Seoul')::time
+                and m.start_date<=(i.scheduled_at at time zone 'Asia/Seoul')::date
+                and (m.end_date is null or m.end_date>=(i.scheduled_at at time zone 'Asia/Seoul')::date))
+                """, user,id,Timestamp.from(today().atStartOfDay(SEOUL).toInstant()),
+                Timestamp.from(today().plusDays(1).atStartOfDay(SEOUL).toInstant()));
     }
 
     private void schedules(UUID id, JsonNode body) {
