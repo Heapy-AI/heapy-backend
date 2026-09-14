@@ -36,18 +36,6 @@ public class HomeSummaryRepository {
                           int resultCount, int findingCount) { }
     public record Activity(LocalDate recordDate, int steps, int activeTimeMinutes) { }
 
-    /** 기존 미션 행을 카탈로그의 해당 버전과 연결해 읽기만 한다. @author 김진우 */
-    public List<Mission> missions(UUID userId, LocalDate date) {
-        return jdbc.query("""
-                select m.user_mission_id,c.title,c.description,m.status
-                from public.user_missions m join public.mission_catalog c
-                on c.mission_code=m.mission_code and c.version=m.catalog_version
-                where m.user_id=? and m.mission_date=? and m.status not in ('rejected','abandoned')
-                order by m.created_at,m.user_mission_id
-                """, (rs, row) -> new Mission(rs.getObject(1, UUID.class), rs.getString(2),
-                rs.getString(3), rs.getString(4)), userId, date);
-    }
-
     public List<Alert> alerts(UUID userId) {
         return jdbc.query("""
                 select alert_id,title,message from public.health_alerts
