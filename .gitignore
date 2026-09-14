@@ -19,6 +19,7 @@ application-*.secret.yml
 # 빌드 산출물
 /.gradle/
 /build/
+/bin/
 /out/
 
 # IDE·운영체제
