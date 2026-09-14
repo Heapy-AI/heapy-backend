@@ -3,6 +3,11 @@ package com.heapy.common.exception;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
+    MISSION_NOT_FOUND(HttpStatus.NOT_FOUND,"MISSION-004","미션을 찾을 수 없습니다."),
+    MISSION_CONFLICT(HttpStatus.CONFLICT,"MISSION-001","미션 상태가 변경됐습니다. 다시 확인해 주세요."),
+    MISSION_NOT_COMPLETABLE(HttpStatus.UNPROCESSABLE_CONTENT,"MISSION-003","아직 미션 목표를 달성하지 못했어요. 건강 기록을 동기화해 주세요."),
+    MISSION_NOT_COMPLETED(HttpStatus.CONFLICT,"MISSION-005","완료한 미션에만 피드백을 남길 수 있어요."),
+    MISSION_EXPIRED(HttpStatus.CONFLICT,"MISSION-006","기간이 지난 미션은 완료할 수 없어요."),
     MEDICATION_CONFLICT(HttpStatus.CONFLICT, "MEDICATION-001", "이미 처리한 복약 일정이거나 변경할 수 없는 약입니다. 새로고침해 주세요."),
     HEALTH_SYNC_LIMIT(HttpStatus.PAYLOAD_TOO_LARGE, "HEALTH-009", "동기화 배치는 1MiB 이하로 나눠 전송해 주세요."),
     HEALTH_SYNC_PERMISSION(HttpStatus.FORBIDDEN, "HEALTH-008", "삼성헬스의 11개 읽기 권한을 확인해 주세요."),

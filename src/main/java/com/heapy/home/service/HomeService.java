@@ -8,6 +8,7 @@ import com.heapy.home.dto.HomeResponse;
 import com.heapy.home.repository.UserHomeModuleRepository;
 import com.heapy.home.repository.HomeSummaryRepository;
 import com.heapy.user.domain.User;
+import com.heapy.mission.service.MissionService;
 import com.heapy.user.repository.UserRepository;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -15,6 +16,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,17 +42,20 @@ public class HomeService {
     private final UserHomeModuleRepository homeModuleRepository;
     private final HomeSummaryRepository summaryRepository;
     private final HomeCards cards;
+    private final MissionService missionService;
 
     public HomeService(
             UserRepository userRepository,
             UserHomeModuleRepository homeModuleRepository,
             HomeSummaryRepository summaryRepository,
-            HomeCards cards
+            HomeCards cards,
+            MissionService missionService
     ) {
         this.userRepository = userRepository;
         this.homeModuleRepository = homeModuleRepository;
         this.summaryRepository = summaryRepository;
         this.cards = cards;
+        this.missionService=missionService;
     }
 
     @Transactional
@@ -68,7 +73,8 @@ public class HomeService {
         HomeSummaryRepository.Summary summary = summaryRepository.find(userId);
         HomeCards.Data cardData = cards.find(userId);
         LocalDate today = cardData == null ? LocalDate.now(SERVICE_ZONE) : cardData.date();
-        var missions = summaryRepository.missions(userId, today);
+        var missions = missionService.today(userId).missions().stream().map(m -> new HomeSummaryRepository.Mission(
+                m.missionId(),m.title(),m.description(),m.status().name().toLowerCase(Locale.ROOT))).toList();
         boolean hasMetrics = (summary != null && summary.hasData())
                 || (cardData != null && !cardData.metrics().isEmpty());
         List<HomeModuleResponse> moduleResponses = modules.stream()
