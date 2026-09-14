@@ -31,6 +31,12 @@ public final class MissionFullProgress {
         LocalDate monday=day.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         var sleeps=all.stream().filter(e->e.type().equals("sleep")&&!e.start().isBefore(row.startsAt())&&!e.end().isAfter(end)).toList();
         return switch(row.completion()) {
+            case "manual_bp", "manual_weight", "manual_sleep", "manual_water" -> (int) all.stream()
+                    .filter(e -> e.type().equals(row.completion()) && !e.start().isBefore(row.startsAt())
+                            && !e.start().isAfter(end) && e.tag().equals(day.toString())).count();
+            case "record_checkup_any" -> (int) all.stream().filter(e -> e.type().equals("checkup")
+                    && !e.start().isBefore(row.startsAt()) && !e.start().isAfter(end)).count();
+            case "manual" -> row.currentValue();
             case "bedtime" -> countSleep(sleeps,row,number(p,"minute"),false,false,0);
             case "wake" -> countSleep(sleeps,row,number(p,"minute"),true,false,0);
             case "weekend_wake" -> (int)sleeps.stream().filter(e->date(e.end()).equals(LocalDate.parse((String)p.get("targetDate")))&&near(minute(e.end()),number(p,"minute"))).map(e->date(e.end())).distinct().count();

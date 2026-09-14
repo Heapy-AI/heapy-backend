@@ -42,11 +42,8 @@ public class MissionRecommendationService {
         var input=recommendations.input(user,LocalDate.now(clock.withZone(HealthPeriod.ZONE)),now);
         var records=evidence.load(user,input.today(),now);
         var definitions=recommendations.definitions();
-        String recording=List.of("BIO","SLEEP","CHECKUP").stream()
-                .flatMap(s->MissionFullRecommendationEngine.recommend(input,records,s,definitions,now).stream())
-                .filter(s->s.missionType().equals("RECORDING")).map(MissionSuggestion::code).sorted().findFirst().orElse("");
         var list=MissionFullRecommendationEngine.recommend(input,records,scope,definitions,now).stream()
-                .filter(s->!s.missionType().equals("RECORDING")||s.code().equals(recording)).limit(all?100:3).toList();
+                .limit(all?100:3).toList();
         return new Suggestions(scope,!list.isEmpty()?"RECOMMENDED":!input.eligible() || scope.equals("NUTRITION") && !input.waterSafe() ? "SAFETY_NOTICE"
                 : list.isEmpty() ? "NO_CANDIDATE" : "RECOMMENDED",list);
     }

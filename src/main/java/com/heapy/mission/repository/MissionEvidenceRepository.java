@@ -68,6 +68,23 @@ public class MissionEvidenceRepository {
                 where user_id=? and measured_at>=? and measured_at<=?
                 and ((bio_type='blood_pressure' and systolic_mmhg is not null and diastolic_mmhg is not null) or (bio_type='body_composition' and weight_kg is not null))
                 """,MissionEvidenceRepository::event,user,Timestamp.from(start),Timestamp.from(now)));
+        // 작성자: 김진우 — 직접 입력 미션은 측정 시각과 별도로 생성 시각을 확인한다.
+        events.addAll(jdbc.query("""
+                select 'manual_bp',created_at,created_at,1,(measured_at at time zone 'Asia/Seoul')::date::text
+                from public.lifestyle_bio where user_id=? and created_at>=? and created_at<=? and source='manual'
+                and bio_type='blood_pressure' and systolic_mmhg is not null and diastolic_mmhg is not null
+                union all
+                select 'manual_weight',created_at,created_at,1,(measured_at at time zone 'Asia/Seoul')::date::text
+                from public.lifestyle_bio where user_id=? and created_at>=? and created_at<=? and source='manual' and weight_kg>0
+                union all
+                select 'manual_sleep',created_at,created_at,1,(end_at at time zone 'Asia/Seoul')::date::text
+                from public.lifestyle_sleep where user_id=? and created_at>=? and created_at<=? and source='manual' and end_at>start_at
+                union all
+                select 'manual_water',created_at,created_at,1,(consumed_at at time zone 'Asia/Seoul')::date::text
+                from public.lifestyle_water_intake where user_id=? and created_at>=? and created_at<=? and source='manual' and amount_ml>0
+                """,MissionEvidenceRepository::event,
+                user,Timestamp.from(start),Timestamp.from(now),user,Timestamp.from(start),Timestamp.from(now),
+                user,Timestamp.from(start),Timestamp.from(now),user,Timestamp.from(start),Timestamp.from(now)));
         var checkups=jdbc.query("""
                 select 'checkup',created_at,created_at,(measured_at-date '1970-01-01')::double precision,measured_at::text
                 from public.health_checkup_records where user_id=? and measured_at<=? and created_at<=?
