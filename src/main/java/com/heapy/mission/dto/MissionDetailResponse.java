@@ -5,6 +5,7 @@ import com.heapy.mission.model.MissionStatus;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
+import java.util.Map;
 
 public record MissionDetailResponse(
         UUID missionId,
@@ -20,6 +21,6 @@ public record MissionDetailResponse(
         int progressPercent,
         MissionStatus status,
         Instant completedAt,
-        MissionFeedback feedback
+        MissionFeedback feedback, boolean manualAllowed, Instant endsAt,Map<String,Object> parameters
 ) {
 }

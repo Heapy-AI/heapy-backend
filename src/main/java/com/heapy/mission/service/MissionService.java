@@ -41,9 +41,9 @@ public class MissionService {
     @Transactional
     public MissionTodayResponse today(UUID userId) {
         LocalDate today = LocalDate.now(clock.withZone(HealthPeriod.ZONE));
-        repository.ensureDailyMissions(userId, today);
+        repository.lockUser(userId);
         refresh(userId,today);
-        List<MissionRow> rows = repository.findByDate(userId, today);
+        List<MissionRow> rows = repository.findByDate(userId, today, true);
         List<MissionItemResponse> missions = rows.stream().map(this::toItem).toList();
         int completed = (int) rows.stream().filter(row -> row.completedAt() != null).count();
         return new MissionTodayResponse(today, completed, rows.size(), rate(completed, rows.size()), missions);
@@ -78,7 +78,7 @@ public class MissionService {
         repository.lockUser(userId);
         MissionRow mission = find(userId, missionId);
         if (mission.completedAt() != null) return toDetail(mission);
-        if(!mission.missionDate().equals(LocalDate.now(clock.withZone(HealthPeriod.ZONE))))
+        if(mission.state().equals("abandoned") || !clock.instant().isBefore(mission.endsAt()))
             throw new HeapyException(ErrorCode.MISSION_EXPIRED);
         refresh(userId,mission.missionDate());
         mission=find(userId,missionId);
@@ -91,14 +91,42 @@ public class MissionService {
         return toDetail(find(userId, missionId));
     }
 
+    /** 수동 확인을 허용한 카탈로그만 사용자의 수행 확인을 받는다. @author 김진우 */
+    @Transactional
+    public MissionDetailResponse confirm(UUID userId, UUID missionId) {
+        repository.lockUser(userId);
+        var row=find(userId,missionId);
+        if(row.completedAt()!=null) return toDetail(row);
+        if(row.state().equals("abandoned") || !clock.instant().isBefore(row.endsAt())) throw new HeapyException(ErrorCode.MISSION_EXPIRED);
+        if(!row.manualAllowed()) throw new HeapyException(ErrorCode.INVALID_INPUT);
+        int manual=repository.manualDay(userId,missionId,LocalDate.now(clock.withZone(HealthPeriod.ZONE)).toString());
+        int value=row.completion().equals("weekly_strength")
+                ? Math.max(row.currentValue(),manual)
+                : row.targetValue();
+        repository.updateProgress(userId,missionId,Math.min(value,row.targetValue()));
+        return value>=row.targetValue()?complete(userId,missionId):detail(userId,missionId);
+    }
+
+    @Transactional
+    public MissionDetailResponse abandon(UUID user,UUID id) {
+        repository.lockUser(user);
+        var row=find(user,id);
+        if(row.completedAt()!=null) throw new HeapyException(ErrorCode.MISSION_CONFLICT);
+        repository.abandon(user,id,clock.instant());
+        return detail(user,id);
+    }
+
     private void refresh(UUID userId, LocalDate date) {
-        if(!date.equals(LocalDate.now(clock.withZone(HealthPeriod.ZONE)))) return;
-        var rows=repository.findByDate(userId,date);
-        if(rows.stream().noneMatch(r->r.completedAt()==null)) return;
-        var values=health.progress(userId,date,clock.instant());
+
+        var rows=repository.findByDate(userId,date,true).stream().filter(r->r.completedAt()==null&&!r.state().equals("abandoned")&&clock.instant().isBefore(r.endsAt())).toList();
+        if(rows.isEmpty()) return;
+        var values=rows.stream().anyMatch(r->r.completion()==null)?health.progress(userId,date,clock.instant()):Map.<String,Integer>of();
+        var recommended=health.recommendedProgress(userId,rows.stream().filter(r->r.completion()!=null).toList(),clock.instant());
         for(var row:rows) {
-            if(row.completedAt()!=null) continue;
-            int value=Math.min(values.getOrDefault(row.code(),0),row.targetValue());
+            if(row.completedAt()!=null || row.state().equals("abandoned") || !clock.instant().isBefore(row.endsAt())) continue;
+            int value=Math.min(row.completion()==null ? values.getOrDefault(row.code(),0) : recommended.getOrDefault(row.missionId(),0),row.targetValue());
+            if(row.manualAllowed() && !row.completion().equals("weekly_strength")
+                    && row.parameters().get("_manualDays") instanceof List<?> days && !days.isEmpty()) value=row.targetValue();
             if(row.currentValue()!=value) repository.updateProgress(userId,row.missionId(),value);
         }
     }
@@ -178,7 +206,7 @@ public class MissionService {
                 row.currentValue(),
                 progress(row),
                 status(row),
-                row.displayOrder()
+                row.displayOrder(),row.scope()
         );
     }
 
@@ -197,13 +225,13 @@ public class MissionService {
                 progress(row),
                 status(row),
                 row.completedAt(),
-                row.feedback()
+                row.feedback(),row.manualAllowed(),row.endsAt(),row.parameters()
         );
     }
 
     private MissionStatus status(MissionRow row) {
         if (row.completedAt() != null) return MissionStatus.COMPLETED;
-        if (row.missionDate().isBefore(LocalDate.now(clock.withZone(HealthPeriod.ZONE)))) return MissionStatus.EXPIRED;
+        if (row.state().equals("abandoned") || !clock.instant().isBefore(row.endsAt())) return MissionStatus.EXPIRED;
         if (row.currentValue() >= row.targetValue()) return MissionStatus.COMPLETABLE;
         if (row.currentValue() > 0) return MissionStatus.IN_PROGRESS;
         return MissionStatus.READY;

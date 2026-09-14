@@ -14,6 +14,6 @@ public record MissionItemResponse(
         int currentValue,
         int progressPercent,
         MissionStatus status,
-        int displayOrder
+        int displayOrder, String scope
 ) {
 }

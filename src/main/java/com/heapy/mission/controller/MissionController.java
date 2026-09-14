@@ -7,6 +7,12 @@ import com.heapy.mission.dto.MissionFeedbackRequest;
 import java.time.LocalDate;
 import com.heapy.mission.dto.MissionTodayResponse;
 import com.heapy.mission.service.MissionService;
+import com.heapy.mission.service.MissionRecommendationService;
+import com.heapy.mission.model.MissionOptions;
+import org.springframework.web.bind.annotation.PutMapping;
+import com.heapy.mission.service.MissionRecommendationService.Suggestions;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import com.heapy.security.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -33,9 +39,50 @@ import org.springframework.web.bind.annotation.RestController;
 public class MissionController {
 
     private final MissionService missionService;
+    private final MissionRecommendationService recommendations;
 
-    public MissionController(MissionService missionService) {
+    public MissionController(MissionService missionService, MissionRecommendationService recommendations) {
         this.missionService = missionService;
+        this.recommendations = recommendations;
+    }
+
+    public record AcceptRequest(@NotBlank String scope, @NotBlank String code, @NotNull UUID idempotencyKey) { }
+
+    @GetMapping("/suggestions")
+    public ResponseEntity<ApiResponse<Suggestions>> suggestions(@AuthenticationPrincipal Jwt jwt, @RequestParam String scope) {
+        return ok(recommendations.suggestions(AuthenticatedUser.id(jwt),scope),"추천 미션을 조회했습니다.");
+    }
+
+    @PostMapping("/accept")
+    public ResponseEntity<ApiResponse<MissionDetailResponse>> accept(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody AcceptRequest request) {
+        return ok(recommendations.accept(AuthenticatedUser.id(jwt),request.scope(),request.code(),request.idempotencyKey()),"미션을 추가했습니다.");
+    }
+
+    @PostMapping("/{missionId}/confirm")
+    public ResponseEntity<ApiResponse<MissionDetailResponse>> confirm(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID missionId) {
+        return ok(missionService.confirm(AuthenticatedUser.id(jwt),missionId),"수행 확인을 저장했습니다.");
+    }
+
+    @GetMapping("/options")
+    public ResponseEntity<ApiResponse<MissionOptions>> options(@AuthenticationPrincipal Jwt jwt) {
+        return ok(recommendations.options(AuthenticatedUser.id(jwt)),"미션 설정을 조회했습니다.");
+    }
+
+    @PutMapping("/options")
+    public ResponseEntity<ApiResponse<MissionOptions>> options(@AuthenticationPrincipal Jwt jwt,@Valid @RequestBody MissionOptions options) {
+        return ok(recommendations.saveOptions(AuthenticatedUser.id(jwt),options),"미션 설정을 저장했습니다.");
+    }
+
+    public record ExposureRequest(@NotBlank String scope,@NotBlank String code,@NotBlank String event,@NotNull UUID idempotencyKey) { }
+    @PostMapping("/exposures")
+    public ResponseEntity<ApiResponse<Void>> exposure(@AuthenticationPrincipal Jwt jwt,@Valid @RequestBody ExposureRequest request) {
+        recommendations.exposure(AuthenticatedUser.id(jwt),request.scope(),request.code(),request.event(),request.idempotencyKey());
+        return ok(null,"추천 피드백을 저장했습니다.");
+    }
+
+    @PostMapping("/{missionId}/abandon")
+    public ResponseEntity<ApiResponse<MissionDetailResponse>> abandon(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID missionId) {
+        return ok(missionService.abandon(AuthenticatedUser.id(jwt),missionId),"미션을 중단했습니다.");
     }
 
     @GetMapping("/today")
