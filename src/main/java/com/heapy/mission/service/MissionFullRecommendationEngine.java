@@ -167,8 +167,8 @@ public final class MissionFullRecommendationEngine {
                     reason="설정한 체중 관리 일정에 맞춰 기록 한 건을 남겨요.";
                 }
                 case "REC-SLP-001" -> {
-                    if(!options.noSyncableSleep() || lengths.size()>=5 || allEvents.stream().anyMatch(e->e.type().equals("sleep")&&date(e.end()).equals(today))) continue;
-                    target=1;category="SLEEP";title="어젯밤 취침·기상 시각 기록하기";reason="동기화할 수면 기록이 없다고 확인해 주셔서 직접 기록을 제안해요.";
+                    if(lengths.size()>=5 || allEvents.stream().anyMatch(e->e.type().equals("sleep")&&date(e.end()).equals(today))) continue;
+                    target=1;category="SLEEP";title="어젯밤 취침·기상 시각 기록하기";reason="수면 기록이 충분하지 않아 어젯밤 기록을 직접 입력하도록 제안해요.";
                 }
                 case "REC-CHK-001","REC-CHK-002" -> {
                     boolean latest=code.equals("REC-CHK-001");
@@ -201,20 +201,22 @@ public final class MissionFullRecommendationEngine {
                     definition.ruleId(),definition.catalogVersion(),definition.ruleVersion(),definition.completion(),definition.manualAllowed(),
                     recording?"RECORDING":"HABIT",period,Map.copyOf(parameters)));
         }
-        boolean activeRecording=input.history().stream().anyMatch(h->h.code().startsWith("REC-")&&h.active());
+        // 작성자: 김진우 — 개선 후보를 우선하고 기록·유지 후보로 빈 영역을 보완한다.
+        for (var candidate : MissionContinuityRecommendations.candidates(input,evidence,scope,definitions)) {
+            if (Set.of("REC-SLP-001", "WTR-007").contains(candidate.code())) result.removeIf(s -> s.code().equals(candidate.code()));
+            if (result.stream().noneMatch(s -> s.code().equals(candidate.code()))) result.add(candidate);
+        }
         var eligible=result.stream().filter(s->MissionFullProgress.endsAt(s,today).isAfter(now))
                 .filter(s->!Set.of("SLP-001","SLP-008").contains(s.code())||at(today.plusDays(((Number)s.parameters().get("minute")).intValue()<720?1:0),((Number)s.parameters().get("minute")).intValue()+30).isAfter(now))
                 .map(s->withExposureScore(s,input,evidence,today))
-                .filter(s->!s.missionType().equals("RECORDING")||!activeRecording)
                 .filter(s->!s.code().equals("ACT-012")||minute(now)<720)
-                .filter(s->input.history().stream().noneMatch(h->h.code().equals(s.code())&&(h.active()||h.completed()&&!h.date().isBefore(today.minusDays(14))||h.abandoned()&&!h.date().isBefore(today.minusDays(7)))))
+                .filter(s->input.history().stream().noneMatch(h->h.code().equals(s.code())&&(h.active()||h.completed()&&!h.date().isBefore(s.parameters().containsKey("policy")?today:today.minusDays(14))||h.abandoned()&&!h.date().isBefore(today.minusDays(7)))))
                 .filter(s->evidence.exposures().stream().noneMatch(e->e.code().equals(s.code())&&e.event().equals("rejected")&&!e.date().isBefore(today.minusDays(7))))
                 .filter(s->!s.missionType().equals("RECORDING")||!twoRecentFailures(s.code(),input,evidence,today))
                 .sorted(Comparator.comparing((MissionSuggestion s)->!s.missionType().equals("RECORDING"))
                         .thenComparing(Comparator.comparingInt(MissionSuggestion::score).reversed())
                         .thenComparing(MissionSuggestion::manualAllowed).thenComparing(MissionSuggestion::code)).toList();
-        String recordingCode=eligible.stream().filter(s->s.missionType().equals("RECORDING")).map(MissionSuggestion::code).findFirst().orElse("");
-        return eligible.stream().filter(s->!s.missionType().equals("RECORDING")||s.code().equals(recordingCode)).toList();
+        return eligible;
     }
 
     private static MissionSuggestion withExposureScore(MissionSuggestion s,Input input,MissionEvidence evidence,LocalDate today) {
