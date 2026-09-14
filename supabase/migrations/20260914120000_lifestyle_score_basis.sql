@@ -56,8 +56,10 @@ alter table public.lifestyle_daily_scores
         or (metabolic_coverage is not null
             and (metabolic_bp_score is not null or metabolic_glucose_score is not null))
     ),
-    -- 검진 BMI면 고지할 문구가 있어야 한다. 생활 기록이면 밝힐 것이 없다.
-    add constraint lifestyle_daily_scores_bmi_source_check check (
+    -- BMI 점수가 있으면 어디서 가져왔는지도 있어야 한다.
+    -- 이름에 bmi_source 를 쓰면 안 된다. 위 열 정의의 check 가 Postgres 자동 이름
+    -- lifestyle_daily_scores_bmi_source_check 를 이미 차지한다.
+    add constraint lifestyle_daily_scores_bmi_origin_check check (
         bmi_score is null or bmi_source is not null
     );
 
