@@ -6,7 +6,8 @@ import java.util.List;
 
 /** 사용자 입력을 SQL 식별자로 사용하지 않는 건강 지표 허용 목록이다. @author 김진우 */
 public enum HealthMetric {
-    SLEEP("sleep", "lifestyle_sleep", "sleep_id", "start_at", false,
+    // 작성자: 고수연 — 수면은 '깬 날'에 귀속한다. start_at 으로 묶으면 전 날이 빈 날이 되어, 화면과 삼성헬스가 서로 다른 날을 가리킨다.
+    SLEEP("sleep", "lifestyle_sleep", "sleep_id", "end_at", false,
             List.of(new Field("total_sleep_minutes", "수면시간", "분", true),
                     new Field("deep_sleep_minutes", "깊은 수면", "분", true),
                     new Field("light_sleep_minutes", "얕은 수면", "분", true),

@@ -4,9 +4,12 @@ import com.heapy.checkup.OcrJson;
 import com.heapy.common.exception.ErrorCode;
 import com.heapy.common.exception.HeapyException;
 import com.heapy.health.model.HealthMetric;
+import com.heapy.health.model.HealthPeriod;
 import com.heapy.health.service.HealthSyncInput.Record;
+import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -69,6 +72,7 @@ public class HealthSyncService {
         int batchOperation = applyUnchangedOrNewBatch(user, run, records);
         if (batchOperation >= 0) counts[batchOperation] = records.size();
         else for (Record record : records) counts[apply(user, run, record)]++;
+        invalidateScores(user, records, counts);
         if (through != null) {
             jdbc.update("""
                     insert into private.health_sync_checkpoints(connection_id,data_type,through_at) values(?,?,?)
@@ -87,6 +91,32 @@ public class HealthSyncService {
                 "insertedCount", counts[0], "updatedCount", counts[1], "skippedCount", counts[2], "deletedCount", counts[3], "cursorState", cursors));
         jdbc.update("insert into private.health_record_requests(user_id,operation,request_key,request_hash,response_body) values(?,'samsung-sync',?,?,?::jsonb)", user, key, hash, OcrJson.encode(response));
         return response;
+    }
+
+    /** 기록이 바뀐 날부터의 저장된 점수를 지운다. 작성자: 고수연.
+     *
+     * 점수는 하루 한 번 확정해 저장하고 이미 있으면 다시 계산하지 않는다(LifestyleScoreService).
+     * 그래서 동기화가 늦게 도착하면 '기록 부족'으로 굳은 점수가 그대로 남는다. 지워 두면
+     * 다음 조회에서 새 기록으로 다시 계산한다.
+     */
+    private void invalidateScores(UUID user, List<Record> records, int[] counts) {
+        // 전부 건너뛴 동기화는 바뀐 것이 없다.
+        if (counts[0] + counts[1] + counts[3] == 0) return;
+        LocalDate from = null;
+        for (Record record : records) {
+            Object time = record.values().get(record.metric().time());
+            LocalDate day = time instanceof Timestamp timestamp
+                    ? timestamp.toInstant().atZone(HealthPeriod.ZONE).toLocalDate()
+                    : time instanceof Date date ? date.toLocalDate() : null;
+            if (day != null && (from == null || day.isBefore(from))) from = day;
+        }
+        // 삭제 기록은 values 가 비어 있어 날짜를 알 수 없다. 그때는 보관 구간 전체를 다시 낸다.
+        if (from == null) {
+            jdbc.update("delete from public.lifestyle_daily_scores where user_id=?", user);
+            return;
+        }
+        jdbc.update("delete from public.lifestyle_daily_scores where user_id=? and score_date>=?",
+                user, Date.valueOf(from));
     }
 
     /** 초기 대량 수신은 두 번의 충돌 조회와 JDBC 배치로 저장한다. @author 김진우 */

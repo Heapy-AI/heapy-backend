@@ -95,6 +95,8 @@ public final class HealthSyncInput {
                 if (((BigDecimal) values.get("amount_ml")).signum() <= 0) invalid();
             }
             case SLEEP, EXERCISE -> {
+                // 작성자: 고수연 — 수면의 date_key 가 end_at 이라 start_at 은 여기서 따로 요구한다.
+                required(values, "start_at");
                 required(values, "end_at");
                 if (!((Timestamp) values.get("end_at")).after((Timestamp) values.get("start_at"))) invalid();
                 required(values, metric == HealthMetric.SLEEP ? "total_sleep_minutes" : "duration_seconds");
