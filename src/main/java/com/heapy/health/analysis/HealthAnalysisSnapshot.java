@@ -42,14 +42,19 @@ public class HealthAnalysisSnapshot {
                 Integer.class, user, Date.valueOf(date));
         if (invalidated != null && invalidated > 0) throw new IllegalStateException("자정 당시 원본 확인 불가");
         Map<String, Object> snapshot = new LinkedHashMap<>();
-        Object sex = profiles.getFirst().get("sex");
-        snapshot.put("sex", "male".equals(sex) || "female".equals(sex) ? sex : null);
+        // 작성자: 고수연 — 저장소는 가입 때 'Male'·'Female'로 적는다. 예전에는 소문자만
+        // 통과시켜 모든 사용자의 성별이 null로 나갔다. 표기를 맞추는 일은 받는 쪽이 한다.
+        String sex = String.valueOf(profiles.getFirst().get("sex"));
+        snapshot.put("sex", sex.equalsIgnoreCase("male") || sex.equalsIgnoreCase("female") ? sex : null);
         Object birthday = profiles.getFirst().get("birth_date");
         snapshot.put("age", birthday instanceof Date birth ? Period.between(birth.toLocalDate(), date).getYears() : null);
         Map<String, Object> domains = new LinkedHashMap<>();
         int total = 0;
         for (HealthMetric metric : HealthMetric.values()) {
-            var period = HealthPeriod.of("1y", date.minusDays(1), "raw");
+            // 작성자: 고수연 — 1년을 싣던 것을 180일로 줄인다. 받는 쪽이 그보다 멀리 보지
+            // 않는다. normalize_window 가 생체·종합·점수에 180일, 나머지에 90일을 쓴다.
+            // 1년치를 보내면 절반 이상이 도착하자마자 버려지는데 요청 크기 상한은 그대로 먹는다.
+            var period = HealthPeriod.of("180d", date.minusDays(1), "raw");
             var rows = records.find(user, metric, period, null, 10001, null, null);
             total += rows.size();
             if (total > 10000) throw new IllegalStateException("분석 입력 한도 초과");

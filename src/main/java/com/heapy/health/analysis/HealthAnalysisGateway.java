@@ -24,6 +24,19 @@ public class HealthAnalysisGateway {
      * @author 고수연
      */
     private static final int SCORE_LIMIT = 1048576;
+    /**
+     * 요청 상한.
+     *
+     * 256KiB 였는데 기록이 1년쯤 쌓인 사용자의 스냅샷이 이를 넘겨, 점수도 분석도 브리핑도
+     * 모두 게이트웨이에서 막혔다. 기록이 하나도 없는 사용자만 결과를 받는 상태였다.
+     *
+     * 받는 쪽의 실제 계약은 바이트가 아니라 **행 수**다. FastAPI 가 10,000행에서 거절한다.
+     * 한 행이 대략 400바이트이므로 그 계약에 맞춰 4MiB 로 둔다. 바이트 상한이 행 상한보다
+     * 먼저 걸리면, 계약이 허용하는 입력을 우리 쪽에서 조용히 막는 셈이 된다.
+     *
+     * @author 고수연
+     */
+    private static final int REQUEST_LIMIT = 4194304;
     private final String baseUrl;
     private final String token;
     public HealthAnalysisGateway(@Value("${heapy.chat.base-url:http://heapy-fastapi:8000}") String baseUrl,
@@ -58,7 +71,7 @@ public class HealthAnalysisGateway {
         try {
             if (token.length() < 32) throw new IllegalStateException();
             byte[] request = OcrJson.encode(snapshot).getBytes(StandardCharsets.UTF_8);
-            if (request.length > 262144) throw new IllegalArgumentException();
+            if (request.length > REQUEST_LIMIT) throw new IllegalArgumentException();
             connection = (HttpURLConnection) URI.create(baseUrl + "/internal/health/analyses").toURL().openConnection();
             connection.setRequestMethod("POST"); connection.setConnectTimeout(5000); connection.setReadTimeout(90000);
             connection.setInstanceFollowRedirects(false); connection.setDoOutput(true);
