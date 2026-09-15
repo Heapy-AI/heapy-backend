@@ -11,6 +11,8 @@ REQUIRED = {
 }
 OPTIONAL = {"SUPABASE_JWT_AUDIENCE", "SUPABASE_SIGNUP_REDIRECT_URL",
             "CHAT_ENABLED", "CHAT_BASE_URL", "CHAT_INTERNAL_TOKEN",
+            "HEALTH_ANALYSIS_ENABLED", "HEALTH_REDIS_HOST",
+            "HEALTH_REDIS_PORT", "HEALTH_REDIS_PASSWORD",
             "PUSH_ENABLED", "FIREBASE_PROJECT_ID", "GOOGLE_APPLICATION_CREDENTIALS"}
 
 
@@ -27,6 +29,13 @@ def validate(path):
         values[key] = value
     if REQUIRED - values.keys():
         raise ValueError("필수 환경변수가 누락됐습니다.")
+    # 작성자: 김진우 — 분석·Redis 설정도 배포 시 허용하되 잘못된 형식은 차단한다.
+    if values.get("HEALTH_ANALYSIS_ENABLED", "false") not in {"true", "false"}:
+        raise ValueError("건강 분석 활성화 값은 true 또는 false여야 합니다.")
+    if "HEALTH_REDIS_PORT" in values:
+        port = values["HEALTH_REDIS_PORT"]
+        if not re.fullmatch(r"[0-9]{1,5}", port) or not 1 <= int(port) <= 65535:
+            raise ValueError("Redis 포트는 1부터 65535 사이의 정수여야 합니다.")
     if values.get("PUSH_ENABLED", "false") not in {"true", "false"}:
         raise ValueError("푸시 활성화 값은 true 또는 false여야 합니다.")
     if values.get("PUSH_ENABLED") == "true":
