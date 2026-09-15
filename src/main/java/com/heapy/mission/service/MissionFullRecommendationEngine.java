@@ -209,7 +209,7 @@ public final class MissionFullRecommendationEngine {
                 .filter(s->!Set.of("SLP-001","SLP-008").contains(s.code())||at(today.plusDays(((Number)s.parameters().get("minute")).intValue()<720?1:0),((Number)s.parameters().get("minute")).intValue()+30).isAfter(now))
                 .map(s->withExposureScore(s,input,evidence,today))
                 .filter(s->!s.code().equals("ACT-012")||minute(now)<720)
-                .filter(s->input.history().stream().noneMatch(h->h.code().equals(s.code())&&h.active()))
+                .filter(s->MissionRepeatPolicy.allows(s,input,evidence))
                 .sorted(Comparator.comparing((MissionSuggestion s)->!s.missionType().equals("RECORDING"))
                         .thenComparing(Comparator.comparingInt(MissionSuggestion::score).reversed())
                         .thenComparing(MissionSuggestion::manualAllowed).thenComparing(MissionSuggestion::code)).toList();
