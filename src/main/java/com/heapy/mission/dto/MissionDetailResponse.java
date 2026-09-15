@@ -23,4 +23,6 @@ public record MissionDetailResponse(
         Instant completedAt,
         MissionFeedback feedback, boolean manualAllowed, Instant endsAt,Map<String,Object> parameters
 ) {
+    /** 모든 미션의 신규 완료 보상은 10코인이다. @author 김진우 */
+    public int getRewardCoins() { return 10; }
 }
