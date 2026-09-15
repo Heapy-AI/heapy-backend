@@ -44,8 +44,7 @@ public class MissionRecommendationService {
         var definitions=recommendations.definitions();
         var list=MissionFullRecommendationEngine.recommend(input,records,scope,definitions,now).stream()
                 .limit(all?100:3).toList();
-        return new Suggestions(scope,!list.isEmpty()?"RECOMMENDED":!input.eligible() || scope.equals("NUTRITION") && !input.waterSafe() ? "SAFETY_NOTICE"
-                : list.isEmpty() ? "NO_CANDIDATE" : "RECOMMENDED",list);
+        return new Suggestions(scope,list.isEmpty()?"NO_CANDIDATE":"RECOMMENDED",list);
     }
     @Transactional(readOnly=true)
     public MissionOptions options(UUID user) {return evidence.options(user);}

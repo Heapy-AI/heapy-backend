@@ -13,7 +13,6 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.Period;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -40,27 +39,14 @@ public class MissionRecommendationRepository {
     }
 
     public Input input(UUID user, LocalDate today, Instant now) {
-        boolean eligible = jdbc.query("""
-                select birth_date,chronic_conditions,health_cautions,onboarding_completed_at from public.users where user_id=?
-                """, (rs,n) -> {
-                    var birth = rs.getDate(1);
-                    if (birth == null || rs.getTimestamp(4) == null) return false;
-                    int age = Period.between(birth.toLocalDate(), today).getYears();
-                    // 자유 입력 주의사항은 안전 여부를 추측하지 않고 전용 규칙 확인 전 제외한다.
-                    return age >= 18 && age < 65 && "[]".equals(rs.getString(2))
-                            && (rs.getString(3) == null || rs.getString(3).isBlank());
-                }, user).stream().findFirst().orElse(false);
         var statuses = jdbc.query("""
                 select item_code,status from public.health_checkup_results where record_id=(
                     select record_id from public.health_checkup_records where user_id=? and measured_at<=?
                     order by measured_at desc,created_at desc,record_id limit 1)
                 """, (rs,n) -> List.of(rs.getString(1), rs.getString(2) == null ? "" : rs.getString(2)), user,Date.valueOf(today));
-        Set<String> managed = new HashSet<>(); boolean waterSafe = true;
+        Set<String> managed = new HashSet<>();
         for (var status : statuses) {
             String code = status.get(0), value = status.get(1).trim();
-            boolean normal = Set.of("정상", "정상A", "정상(A)", "NORMAL", "normal").contains(value);
-            if (Set.of("EGFR", "URINE_PROTEIN").contains(code) && !normal) waterSafe = false;
-            if (value.contains("질환의심") || value.contains("유질환")) eligible = false;
             if (!Set.of("정상B", "정상(B)", "경계", "주의", "관리", "관리대상", "정상(경계)", "BORDERLINE").contains(value)) continue;
             if (Set.of("SYSTOLIC_BP", "DIASTOLIC_BP").contains(code)) managed.add("BP");
             if (Set.of("BMI", "WEIGHT").contains(code)) managed.add("WEIGHT");
@@ -96,7 +82,7 @@ public class MissionRecommendationRepository {
                 order by um.created_at desc
                 """, (rs,n) -> new History(rs.getString(1),rs.getString(2),rs.getDate(3).toLocalDate(),rs.getBoolean(4),rs.getBoolean(5),rs.getBoolean(6)),
                 Timestamp.from(now),Timestamp.from(now),user,Date.valueOf(today.minusDays(30)),Timestamp.from(now));
-        return new Input(today,eligible,waterSafe,managed,days,history);
+        return new Input(today,true,true,managed,days,history);
     }
 
     public UUID existing(UUID user, UUID key, String code) {

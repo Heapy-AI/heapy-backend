@@ -21,7 +21,7 @@ public final class MissionRecommendationEngine {
             List<Day> days, List<History> history) { }
 
     public static List<MissionSuggestion> recommend(Input input, String scope, List<Definition> definitions) {
-        if (!input.eligible() || scope.equals("SUMMARY")) return List.of();
+        if (scope.equals("SUMMARY")) return List.of();
         List<MissionSuggestion> result = new ArrayList<>();
         var steps = values(input, 14, 0, "steps");
         var previousSteps = values(input, 14, 14, "steps");
@@ -83,14 +83,14 @@ public final class MissionRecommendationEngine {
                     reason = "최근 7일 수면시간을 바탕으로 오늘 밤 목표를 추천했어요. 내일 수면 기록으로 확인해요.";
                 }
                 case "WATER_DATA_FALLBACK_01" -> {
-                    if (!input.waterSafe() || water.size() >= 7) continue;
+                    if (water.size() >= 7) continue;
                     category = "HYDRATION"; target = 250; unit = "ML"; need = 10; reliability = 5;
                     title = "오늘 물 250mL 마시기";
                     reason = "아직 물 기록이 충분하지 않아 한 잔부터 시작해요. 미션 추가 이후의 기록으로 확인해요.";
                 }
                 case "WATER_DROP_01" -> {
                     var current = values(input, 7, 0, "water"); var previous = values(input, 7, 7, "water");
-                    if (!input.waterSafe() || current.size() < 5 || previous.size() < 5
+                    if (current.size() < 5 || previous.size() < 5
                             || median(previous) <= 0 || median(current) > median(previous) * .8) continue;
                     category = "HYDRATION"; unit = "ML"; target = (int)Math.floor(median(current) + 250);
                     title = "오늘 평소보다 물 250mL 더 마시기"; need = 30;
@@ -118,8 +118,7 @@ public final class MissionRecommendationEngine {
             }
             if (!match) continue;
             var history = input.history().stream().filter(h -> h.code().equals(d.code())).toList();
-            if (history.stream().anyMatch(h -> h.active() || h.completed() && !h.date().isBefore(input.today().minusDays(14))
-                    || h.abandoned() && !h.date().isBefore(input.today().minusDays(7)))) continue;
+            if (history.stream().anyMatch(History::active)) continue;
             var last = history.stream().map(History::date).max(Comparator.naturalOrder()).orElse(LocalDate.MIN);
             int novelty = last.isBefore(input.today().minusDays(29)) ? 10 : last.isBefore(input.today().minusDays(14)) ? 5 : 0;
             String selectedCategory = category;
