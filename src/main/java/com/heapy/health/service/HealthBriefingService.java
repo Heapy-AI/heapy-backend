@@ -40,6 +40,11 @@ public class HealthBriefingService {
     public void run(UUID user, LocalDate date, Map<String, Object> snapshot) {
         if (!date.equals(LocalDate.now(HealthPeriod.ZONE)) || snapshot == null) return;
         if (!store.claim(user, date)) return;
+        generateClaimed(user, date, snapshot);
+    }
+
+    /** 실행권을 확보한 배치 또는 수동 재시도의 결과를 저장한다. @author 김진우 */
+    public void generateClaimed(UUID user, LocalDate date, Map<String, Object> snapshot) {
         String status = "failed";
         String failure = "provider_error";
         JsonNode briefing = null;

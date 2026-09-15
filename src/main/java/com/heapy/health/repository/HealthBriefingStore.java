@@ -29,6 +29,15 @@ public class HealthBriefingStore {
                 """, user, Date.valueOf(date)) == 1;
     }
 
+    /** 실패한 오늘 브리핑만 원자적으로 재시도한다. @author 김진우 */
+    public boolean retryFailed(UUID user, LocalDate date) {
+        return jdbc.update("""
+                update public.daily_health_briefings
+                   set status='pending', failure_code=null, updated_at=current_timestamp
+                 where user_id=? and briefing_date=? and status='failed'
+                """, user, Date.valueOf(date)) == 1;
+    }
+
     /** 차지해 둔 행을 채운다. 실패해도 그 사실을 남겨 다음 배치가 또 부르지 않게 한다. */
     public void complete(UUID user, LocalDate date, String status, JsonNode briefing,
                          JsonNode evidence, String failureCode, String scoreVersion) {
