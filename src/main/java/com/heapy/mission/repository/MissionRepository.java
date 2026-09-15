@@ -89,13 +89,19 @@ public class MissionRepository {
     }
 
     public int complete(UUID userId, UUID missionId) {
-        return jdbc.update("""
+        int completed = jdbc.update("""
                 update public.user_missions um
                    set completed_at=now(),status='completed',updated_at=now()
                  where um.user_id=? and um.mission_id=? and um.completed_at is null and um.status='active'
                    and um.current_value>=coalesce((um.target_value->>'targetValue')::int,
                        (select target_value from public.mission_templates where template_id=um.template_id))
                 """, userId, missionId);
+        // 작성자: 김진우 — 미션 완료와 보상은 호출 서비스의 동일 트랜잭션으로 확정한다.
+        if (completed == 1) {
+            jdbc.update("insert into public.coin_ledger(user_id,amount,kind,mission_id) values (?,10,'mission_reward',?)",
+                    userId, missionId);
+        }
+        return completed;
     }
 
     public int saveFeedback(UUID userId, UUID missionId, MissionFeedback feedback) {

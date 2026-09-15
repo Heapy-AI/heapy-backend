@@ -3,6 +3,11 @@ package com.heapy.common.exception;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
+    SHOP_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "SHOP-001", "판매 중인 아이템을 찾을 수 없습니다."),
+    SHOP_ALREADY_OWNED(HttpStatus.CONFLICT, "SHOP-002", "이미 보유한 아이템입니다."),
+    SHOP_INSUFFICIENT_COINS(HttpStatus.CONFLICT, "SHOP-003", "코인이 부족합니다."),
+    SHOP_NOT_OWNED(HttpStatus.CONFLICT, "SHOP-004", "보유한 아이템만 착용할 수 있습니다."),
+    SHOP_REFUND_EXPIRED(HttpStatus.CONFLICT, "SHOP-005", "구매 취소 가능 기간이 지났습니다."),
     MISSION_NOT_FOUND(HttpStatus.NOT_FOUND,"MISSION-004","미션을 찾을 수 없습니다."),
     MISSION_CONFLICT(HttpStatus.CONFLICT,"MISSION-001","미션 상태가 변경됐습니다. 다시 확인해 주세요."),
     MISSION_NOT_COMPLETABLE(HttpStatus.UNPROCESSABLE_CONTENT,"MISSION-003","아직 미션 목표를 달성하지 못했어요. 건강 기록을 동기화해 주세요."),
