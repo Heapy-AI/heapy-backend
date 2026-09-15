@@ -1,6 +1,8 @@
 package com.heapy.health.analysis;
 
 import com.heapy.health.model.HealthPeriod;
+import com.heapy.health.repository.HealthBriefingStore;
+import com.heapy.health.service.HealthBriefingService;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -26,10 +28,14 @@ public class HealthAnalysisScheduler {
     private final JdbcTemplate jdbc;
     private final HealthAnalysisSnapshot snapshots;
     private final HealthAnalysisRunner runner;
+    private final HealthBriefingService briefings;
+    private final HealthBriefingStore briefingStore;
 
     public HealthAnalysisScheduler(DataSource dataSource, JdbcTemplate jdbc, HealthAnalysisSnapshot snapshots,
-                                    HealthAnalysisRunner runner) {
+                                    HealthAnalysisRunner runner, HealthBriefingService briefings,
+                                    HealthBriefingStore briefingStore) {
         this.dataSource = dataSource; this.jdbc = jdbc; this.snapshots = snapshots; this.runner = runner;
+        this.briefings = briefings; this.briefingStore = briefingStore;
     }
 
     @Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")
@@ -62,15 +68,21 @@ public class HealthAnalysisScheduler {
         jdbc.update("delete from private.health_analysis_runs where analysis_date<?", Date.valueOf(day.minusDays(6)));
         jdbc.update("delete from private.health_analysis_invalidations where analysis_date<?", Date.valueOf(day.minusDays(6)));
         jdbc.update("update private.health_analysis_runs set status='failed',completed_at=clock_timestamp() where status='generating' and started_at<clock_timestamp()-interval '10 minutes'");
+        // 작성자: 고수연 — 홈 브리핑도 같은 기간만 남긴다. 지난 흐름을 보여주는 화면이 생기면 늘린다.
+        briefingStore.pruneAll(day.minusDays(6));
         UUID cursor = new UUID(0, 0);
         while (day.equals(LocalDate.now(HealthPeriod.ZONE))) {
+            // 작성자: 고수연 — 브리핑이 없는 사용자도 집어 든다. 여섯 분석이 이미 다 찬 날에
+            // 브리핑 기능을 처음 켜면, 이 조건이 없으면 아무도 브리핑을 받지 못한다.
             var users = jdbc.query("""
                 select user_id from public.users u where onboarding_completed_at<?
-                and (select count(*) from private.health_analysis_runs r where r.user_id=u.user_id and r.analysis_date=?)<6
+                and ((select count(*) from private.health_analysis_runs r where r.user_id=u.user_id and r.analysis_date=?)<6
+                     or not exists (select 1 from public.daily_health_briefings b
+                                     where b.user_id=u.user_id and b.briefing_date=?))
                 and user_id>?
                 order by user_id limit 100
                 """, (rs, row) -> rs.getObject(1, UUID.class),
-                Timestamp.from(day.atStartOfDay(HealthPeriod.ZONE).toInstant()), date, cursor);
+                Timestamp.from(day.atStartOfDay(HealthPeriod.ZONE).toInstant()), date, date, cursor);
             if (users.isEmpty()) return;
             cursor = users.getLast();
         for (UUID user : users) {
@@ -79,6 +91,8 @@ public class HealthAnalysisScheduler {
                 var snapshot = snapshots.load(user, day);
                 if (snapshot == null) continue;
                 for (String category : CATEGORIES) runner.run(user, day, category, snapshot);
+                // 같은 스냅샷으로 홈 브리핑까지 만든다. 두 번 읽을 이유가 없다.
+                briefings.run(user, day, snapshot);
             } catch (RuntimeException error) {
                 for (String category : CATEGORIES) {
                     jdbc.update("""
