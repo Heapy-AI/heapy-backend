@@ -27,7 +27,7 @@ public final class MissionContinuityRecommendations {
                 if (MissionRecommendationEngine.values(input, 7, 0, "sleep").size() < 5) {
                     add(result, definitions, "REC-SLP-001", scope, "어젯밤 수면 직접 기록하기", "SLEEP",
                             "수면 기록이 충분하지 않아요. 어젯밤 취침·기상 시각을 앱에 입력해 주세요.", "manual_sleep", "sleep");
-                } else if (input.eligible()) {
+                } else {
                     var sleeps = evidence.events().stream().filter(e -> e.type().equals("sleep")
                             && MissionFullRecommendationEngine.date(e.end()).isBefore(input.today())
                             && !MissionFullRecommendationEngine.date(e.end()).isBefore(input.today().minusDays(7))).toList();
@@ -52,10 +52,10 @@ public final class MissionContinuityRecommendations {
                             "이전 회차 결과를 등록해 검진 수치의 변화를 비교해요.", "record_old_checkup", "checkup",
                             Map.of("beforeDate", evidence.latestCheckupDate().toString()));
                 }
-                if (input.eligible()) activity(result, definitions, scope);
+                activity(result, definitions, scope);
             }
             case "ACTIVITY" -> {
-                if (input.eligible()) activity(result, definitions, scope);
+                activity(result, definitions, scope);
             }
             default -> { }
         }

@@ -46,7 +46,6 @@ public final class MissionFullRecommendationEngine {
         for(var definition:definitions) {
             String code=definition.code(); if(DAILY.contains(code)||Set.of("ACT-007","ACT-008").contains(code)) continue;
             boolean recording=code.startsWith("REC-");
-            if(!input.eligible() && !recording) continue;
             int target=0,need=20,reliability=10; String unit="COUNT",period="DAILY",title="",reason="",category="";
             Map<String,Object> parameters=new HashMap<>();
             switch(code) {
@@ -126,7 +125,7 @@ public final class MissionFullRecommendationEngine {
                     reason="최근 14일과 이전 14일 거리 기록을 비교했어요.";
                 }
                 case "WTR-001","WTR-002","WTR-003","WTR-004","WTR-005" -> {
-                    if(!input.waterSafe() || !(waterLow||waterDrop)) continue;
+                    if(!(waterLow||waterDrop)) continue;
                     if(code.equals("WTR-001") && !waterLow) continue;
                     String meal=code.equals("WTR-003")?"LUNCH":"DINNER";
                     if(Set.of("WTR-003","WTR-005").contains(code)) {
@@ -210,9 +209,7 @@ public final class MissionFullRecommendationEngine {
                 .filter(s->!Set.of("SLP-001","SLP-008").contains(s.code())||at(today.plusDays(((Number)s.parameters().get("minute")).intValue()<720?1:0),((Number)s.parameters().get("minute")).intValue()+30).isAfter(now))
                 .map(s->withExposureScore(s,input,evidence,today))
                 .filter(s->!s.code().equals("ACT-012")||minute(now)<720)
-                .filter(s->input.history().stream().noneMatch(h->h.code().equals(s.code())&&(h.active()||h.completed()&&!h.date().isBefore(s.parameters().containsKey("policy")?today:today.minusDays(14))||h.abandoned()&&!h.date().isBefore(today.minusDays(7)))))
-                .filter(s->evidence.exposures().stream().noneMatch(e->e.code().equals(s.code())&&e.event().equals("rejected")&&!e.date().isBefore(today.minusDays(7))))
-                .filter(s->!s.missionType().equals("RECORDING")||!twoRecentFailures(s.code(),input,evidence,today))
+                .filter(s->input.history().stream().noneMatch(h->h.code().equals(s.code())&&h.active()))
                 .sorted(Comparator.comparing((MissionSuggestion s)->!s.missionType().equals("RECORDING"))
                         .thenComparing(Comparator.comparingInt(MissionSuggestion::score).reversed())
                         .thenComparing(MissionSuggestion::manualAllowed).thenComparing(MissionSuggestion::code)).toList();
@@ -234,14 +231,6 @@ public final class MissionFullRecommendationEngine {
                 s.ruleId(),s.catalogVersion(),s.ruleVersion(),s.completion(),s.manualAllowed(),s.missionType(),s.period(),s.parameters());
     }
 
-    private static boolean twoRecentFailures(String code,Input input,MissionEvidence evidence,LocalDate today) {
-        record Outcome(LocalDate day,boolean success) { }
-        var outcomes=new ArrayList<Outcome>();
-        input.history().stream().filter(h->h.code().equals(code)&&!h.active()).forEach(h->outcomes.add(new Outcome(h.date(),h.completed())));
-        evidence.exposures().stream().filter(e->e.code().equals(code)&&e.event().equals("rejected")).forEach(e->outcomes.add(new Outcome(e.date(),false)));
-        var latest=outcomes.stream().sorted(Comparator.comparing(Outcome::day).reversed()).limit(2).toList();
-        return latest.size()==2&&latest.stream().noneMatch(Outcome::success)&&!latest.getFirst().day().isBefore(today.minusDays(14));
-    }
     public static List<Event> events(List<Event> events,String type,LocalDate from,LocalDate to) {
         return events.stream().filter(e->e.type().equals(type)&&!date(e.end()).isBefore(from)&&date(e.end()).isBefore(to)).toList();
     }
