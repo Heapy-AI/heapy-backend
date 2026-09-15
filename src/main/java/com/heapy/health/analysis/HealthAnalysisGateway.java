@@ -33,7 +33,7 @@ public class HealthAnalysisGateway {
 
     /** 모델이 쓴 분석 문장을 받는다. report.headline 이 없으면 실패로 본다. */
     public JsonNode generate(Map<String, Object> snapshot) {
-        return post(snapshot, false);
+        return post(snapshot, "report");
     }
 
     /**
@@ -45,10 +45,15 @@ public class HealthAnalysisGateway {
      * @author 고수연
      */
     public JsonNode score(Map<String, Object> snapshot) {
-        return post(snapshot, true);
+        return post(snapshot, "score");
     }
 
-    private JsonNode post(Map<String, Object> snapshot, boolean scoring) {
+    /** 홈 화면의 하루 한 건 브리핑을 받는다. report 가 아니라 briefing 으로 온다. */
+    public JsonNode briefing(Map<String, Object> snapshot) {
+        return post(snapshot, "briefing");
+    }
+
+    private JsonNode post(Map<String, Object> snapshot, String expect) {
         HttpURLConnection connection = null;
         try {
             if (token.length() < 32) throw new IllegalStateException();
@@ -62,21 +67,24 @@ public class HealthAnalysisGateway {
             connection.setFixedLengthStreamingMode(request.length);
             try (var stream = connection.getOutputStream()) { stream.write(request); }
             if (connection.getResponseCode() != 200) throw new IllegalStateException();
-            int limit = scoring ? SCORE_LIMIT : REPORT_LIMIT;
+            int limit = "score".equals(expect) ? SCORE_LIMIT : REPORT_LIMIT;
             try (InputStream stream = connection.getInputStream()) {
                 byte[] body = stream.readNBytes(limit + 1);
                 if (body.length > limit) throw new IllegalArgumentException();
                 JsonNode result = OcrJson.MAPPER.readTree(body);
                 String status = result.path("status").asText();
                 if (!"generated".equals(status) && !"data_insufficient".equals(status)) throw new IllegalArgumentException();
-                if (scoring) {
+                boolean malformed = switch (expect) {
                     // 기록이 모자란 날도 score·points 는 온다. total_score 만 null 이다.
-                    if (!result.path("score").isObject() || !result.path("points").isArray()
-                            || result.path("points").size() < 1) throw new IllegalArgumentException();
-                } else if ("generated".equals(status) && (!result.path("report").isObject()
-                        || !result.path("report").path("headline").isTextual())) {
-                    throw new IllegalArgumentException();
-                }
+                    case "score" -> !result.path("score").isObject() || !result.path("points").isArray()
+                            || result.path("points").size() < 1;
+                    // 브리핑과 분석 문장은 기록이 모자라면 본문 없이 상태만 온다.
+                    case "briefing" -> "generated".equals(status) && (!result.path("briefing").isObject()
+                            || !result.path("briefing").path("headline").isTextual());
+                    default -> "generated".equals(status) && (!result.path("report").isObject()
+                            || !result.path("report").path("headline").isTextual());
+                };
+                if (malformed) throw new IllegalArgumentException();
                 return result;
             }
         } catch (Exception error) {
