@@ -29,6 +29,11 @@ public class HealthAnalysisRunner {
                 values (?,?,?,'generating',clock_timestamp()) on conflict do nothing
                 """, user, Date.valueOf(date), category);
         if (claimed == 0) return;
+        generateClaimed(user, date, category, snapshot);
+    }
+
+    /** 실행권을 확보한 요청만 분석한다. @author 김진우 */
+    public void generateClaimed(UUID user, LocalDate date, String category, Map<String, Object> snapshot) {
         String status = "failed";
         // 작성자: 고수연 — 문장의 원본을 실행 이력에도 남긴다. Redis는 앞단 캐시로만 쓴다.
         JsonNode generated = null;
