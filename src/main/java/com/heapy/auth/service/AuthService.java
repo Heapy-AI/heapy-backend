@@ -46,11 +46,6 @@ public class AuthService {
         }
     }
 
-    public void logout(String accessToken) {
-        try { authClient.logout(accessToken); }
-        catch (SupabaseAuthClientException exception) { throw mapException(exception); }
-    }
-
     private LoginResponse response(SupabaseAuthSession session) {
         if (!session.emailVerified()) {
             throw new HeapyException(ErrorCode.EMAIL_NOT_VERIFIED);

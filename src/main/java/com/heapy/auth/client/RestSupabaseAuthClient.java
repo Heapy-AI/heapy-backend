@@ -33,21 +33,6 @@ public class RestSupabaseAuthClient implements SupabaseAuthClient {
         return exchangeTokens("refresh_token", new RefreshBody(refreshToken));
     }
 
-    @Override
-    public void logout(String accessToken) {
-        try {
-            restClient.post().uri("/auth/v1/logout?scope=local")
-                    .headers(headers -> headers.setBearerAuth(accessToken))
-                    .exchange((request, response) -> {
-                        if (response.getStatusCode().is2xxSuccessful()
-                                || response.getStatusCode().value() == 401) return null;
-                        throw new SupabaseAuthClientException(SupabaseAuthClientException.Reason.PROVIDER_UNAVAILABLE);
-                    });
-        } catch (RestClientException exception) {
-            throw new SupabaseAuthClientException(SupabaseAuthClientException.Reason.PROVIDER_UNAVAILABLE, exception);
-        }
-    }
-
     private SupabaseAuthSession exchangeTokens(String grantType, Object body) {
         try {
             return restClient.post()

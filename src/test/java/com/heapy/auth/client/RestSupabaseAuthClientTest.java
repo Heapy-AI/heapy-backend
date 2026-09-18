@@ -61,13 +61,4 @@ class RestSupabaseAuthClientTest {
         assertEquals(SupabaseAuthClientException.Reason.PROVIDER_UNAVAILABLE, error.getReason());
     }
 
-    @Test
-    void logoutRevokesOnlyCurrentDeviceSession() {
-        server.expect(requestTo("https://example.invalid/auth/v1/logout?scope=local"))
-                .andExpect(header("Authorization", "Bearer access"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withNoContent());
-        client.logout("access");
-        server.verify();
-    }
 }
