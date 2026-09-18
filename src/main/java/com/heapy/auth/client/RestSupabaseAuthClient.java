@@ -24,31 +24,56 @@ public class RestSupabaseAuthClient implements SupabaseAuthClient {
 
     @Override
     public SupabaseAuthSession login(String email, String password) {
+        return exchangeTokens("password", new PasswordLoginBody(email, password));
+    }
+
+    /** 만료된 액세스 토큰 대신 갱신 토큰으로 새 세션 쌍을 받는다. @author 김진우 */
+    @Override
+    public SupabaseAuthSession refresh(String refreshToken) {
+        return exchangeTokens("refresh_token", new RefreshBody(refreshToken));
+    }
+
+    @Override
+    public void logout(String accessToken) {
+        try {
+            restClient.post().uri("/auth/v1/logout?scope=local")
+                    .headers(headers -> headers.setBearerAuth(accessToken))
+                    .exchange((request, response) -> {
+                        if (response.getStatusCode().is2xxSuccessful()
+                                || response.getStatusCode().value() == 401) return null;
+                        throw new SupabaseAuthClientException(SupabaseAuthClientException.Reason.PROVIDER_UNAVAILABLE);
+                    });
+        } catch (RestClientException exception) {
+            throw new SupabaseAuthClientException(SupabaseAuthClientException.Reason.PROVIDER_UNAVAILABLE, exception);
+        }
+    }
+
+    private SupabaseAuthSession exchangeTokens(String grantType, Object body) {
         try {
             return restClient.post()
-                    .uri("/auth/v1/token?grant_type=password")
+                    .uri("/auth/v1/token?grant_type=" + grantType)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(new PasswordLoginBody(email, password))
+                    .body(body)
                     .exchange((request, response) -> {
                         if (response.getStatusCode().is2xxSuccessful()) {
-                            PasswordLoginResponse body = response.bodyTo(PasswordLoginResponse.class);
-                            if (body == null || body.user() == null) {
+                            PasswordLoginResponse tokens = response.bodyTo(PasswordLoginResponse.class);
+                            if (tokens == null || tokens.user() == null) {
                                 throw new SupabaseAuthClientException(
                                         SupabaseAuthClientException.Reason.PROVIDER_UNAVAILABLE
                                 );
                             }
-                            long expiresAt = body.expiresAt() == null
-                                    ? Instant.now().plusSeconds(body.expiresIn()).getEpochSecond()
-                                    : body.expiresAt();
+                            long expiresAt = tokens.expiresAt() == null
+                                    ? Instant.now().plusSeconds(tokens.expiresIn()).getEpochSecond()
+                                    : tokens.expiresAt();
                             return new SupabaseAuthSession(
-                                    body.accessToken(),
-                                    body.refreshToken(),
-                                    body.tokenType(),
-                                    body.expiresIn(),
+                                    tokens.accessToken(),
+                                    tokens.refreshToken(),
+                                    tokens.tokenType(),
+                                    tokens.expiresIn(),
                                     Instant.ofEpochSecond(expiresAt),
-                                    body.user().id(),
-                                    body.user().email(),
-                                    body.user().emailConfirmedAt() != null
+                                    tokens.user().id(),
+                                    tokens.user().email(),
+                                    tokens.user().emailConfirmedAt() != null
                             );
                         }
                         SupabaseErrorBody error = response.bodyTo(SupabaseErrorBody.class);
@@ -85,6 +110,10 @@ public class RestSupabaseAuthClient implements SupabaseAuthClient {
     }
 
     private record PasswordLoginBody(String email, String password) {
+    }
+
+    private record RefreshBody(@JsonProperty("refresh_token") String refreshToken) {
+        @Override public String toString() { return "RefreshBody[refreshToken=[REDACTED]]"; }
     }
 
     private record PasswordLoginResponse(

@@ -2,6 +2,9 @@ package com.heapy.auth.controller;
 
 import com.heapy.auth.dto.LoginRequest;
 import com.heapy.auth.dto.LoginResponse;
+import com.heapy.auth.dto.RefreshRequest;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import com.heapy.auth.service.AuthService;
 import com.heapy.common.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,6 +25,20 @@ public class AuthController {
 
     public AuthController(AuthService authService) {
         this.authService = authService;
+    }
+
+    /** 앱 재실행과 사용 중 만료 시 세션을 이어 간다. @author 김진우 */
+    @PostMapping("/refresh")
+    @Operation(summary = "로그인 세션 갱신")
+    public ResponseEntity<ApiResponse<LoginResponse>> refresh(@Valid @RequestBody RefreshRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(authService.refresh(request.refreshToken()), "로그인을 유지했습니다."));
+    }
+
+    @PostMapping("/logout")
+    @Operation(summary = "현재 기기 세션 로그아웃")
+    public ResponseEntity<Void> logout(@AuthenticationPrincipal Jwt jwt) {
+        authService.logout(jwt.getTokenValue());
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/login")

@@ -55,7 +55,11 @@ node_modules/
 /test-results/
 /playwright-report/
 /coverage/
-/src/test/
+/src/test/**
+!/src/test/**/
+!/src/test/java/com/heapy/user/service/AccountWithdrawalServiceTest.java
+!/src/test/java/com/heapy/security/ActiveAccountFilterTest.java
+!/src/test/java/com/heapy/health/analysis/HealthAnalysisCacheTest.java
 **/tests/
 **/__tests__/
 test_*.py
@@ -72,3 +76,4 @@ screenshot*.png
 Screenshot*.png
 스크린샷*.png
 codex-clipboard-*.png
+!/src/test/java/com/heapy/auth/client/RestSupabaseAuthClientTest.java

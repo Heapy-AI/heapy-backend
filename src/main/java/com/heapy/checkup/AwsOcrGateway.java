@@ -135,6 +135,33 @@ public class AwsOcrGateway implements OcrGateway {
         return result;
     }
 
+    /** 취소 상태를 확정한 뒤 원본·제어 객체의 과거 버전까지 지운다. @author 김진우 */
+    @Override
+    public void purgeForWithdrawal(Job job) {
+        purge(job, "cancelled");
+        deleteAllVersions("originals/" + job.id() + "/source");
+        deleteAllVersions("jobs/" + job.id() + ".json");
+    }
+
+    private void deleteAllVersions(String key) {
+        var pages = s3.listObjectVersionsPaginator(b -> b.bucket(properties.bucket())
+                .expectedBucketOwner(properties.accountId()).prefix(key));
+        for (var page : pages) {
+            for (var version : page.versions()) {
+                if (key.equals(version.key())) {
+                    s3.deleteObject(b -> b.bucket(properties.bucket()).expectedBucketOwner(properties.accountId())
+                            .key(key).versionId(version.versionId()));
+                }
+            }
+            for (var marker : page.deleteMarkers()) {
+                if (key.equals(marker.key())) {
+                    s3.deleteObject(b -> b.bucket(properties.bucket()).expectedBucketOwner(properties.accountId())
+                            .key(key).versionId(marker.versionId()));
+                }
+            }
+        }
+    }
+
     private String text(JsonNode node) { return node.isTextual() ? node.asText() : null; }
 
     private void requireEnabled() {

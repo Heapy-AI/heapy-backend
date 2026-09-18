@@ -3,6 +3,8 @@ package com.heapy.common.exception;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
+    WITHDRAWAL_BUSY(HttpStatus.CONFLICT, "WITHDRAWAL-001", "문서를 처리 중입니다. 처리가 끝난 뒤 탈퇴를 다시 시도해 주세요."),
+    WITHDRAWAL_STORAGE_UNSUPPORTED(HttpStatus.SERVICE_UNAVAILABLE, "WITHDRAWAL-002", "추가 저장소의 파일 정리가 필요합니다. 고객 지원에 문의해 주세요."),
     SHOP_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "SHOP-001", "판매 중인 아이템을 찾을 수 없습니다."),
     SHOP_ALREADY_OWNED(HttpStatus.CONFLICT, "SHOP-002", "이미 보유한 아이템입니다."),
     SHOP_INSUFFICIENT_COINS(HttpStatus.CONFLICT, "SHOP-003", "코인이 부족합니다."),
