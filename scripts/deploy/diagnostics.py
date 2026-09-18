@@ -148,6 +148,17 @@ def withdrawal_failures(output):
     return entries[-50:]
 
 
+def ocr_control_failures(output):
+    """작성자: 김진우 — OCR 정리 실패의 허용된 코드만 추출한다."""
+    pattern = re.compile(
+        r'HEAPY_OCR_CONTROL_FAILED traceId=([A-Za-z0-9_-]{1,128}) '
+        r'reason=(worker_error|unexpected_status|lambda_response|contract_version|disabled) '
+        r'code=(JOB_CONFLICT|INVALID_REQUEST|STATE_CONFLICT|INFRASTRUCTURE_FAILED|RESULT_LIMIT|'
+        r'EXPIRED|Unhandled|Handled|pending|processing|completed|failed|unknown)$')
+    return [dict(zip(('traceId', 'reason', 'code'), match.groups()))
+            for line in output.splitlines() if (match := pattern.search(line))][-50:]
+
+
 def inspect():
     data = {'container': state(),
             'kernel_window': journal_summary(['-k']),
@@ -155,6 +166,7 @@ def inspect():
     log_code, log_output = run(['docker', 'logs', '--since', '2h', '--tail', '2000',
                                 'heapy-backend'], merge_error=True)
     data['withdrawal_failures'] = {'query_exit': log_code, 'events': withdrawal_failures(log_output)}
+    data['ocr_control_failures'] = {'query_exit': log_code, 'events': ocr_control_failures(log_output)}
     code, output = run(['docker', 'events', '--since', '2026-09-07T08:21:00Z',
                         '--until', '2026-09-07T08:26:00Z', '--filter', 'type=container',
                         '--format', '{{json .}}'], timeout=8)

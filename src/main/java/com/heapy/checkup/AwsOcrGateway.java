@@ -9,6 +9,9 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -28,6 +31,7 @@ import tools.jackson.databind.JsonNode;
  */
 @Component
 public class AwsOcrGateway implements OcrGateway {
+    private static final Logger log = LoggerFactory.getLogger(AwsOcrGateway.class);
     private final OcrProperties properties;
     private final S3Client s3;
     private final LambdaClient lambda;
@@ -112,10 +116,10 @@ public class AwsOcrGateway implements OcrGateway {
                 "request", request(job), "reason", reason), true);
         if (!response.path("error").isNull() && !response.path("error").isMissingNode()) {
             if ("JOB_NOT_FOUND".equals(response.path("error").path("code").asText())) return;
-            throw new HeapyException(ErrorCode.OCR_UNAVAILABLE);
+            throw controlFailure("worker_error", response.path("error").path("code").asText());
         }
         if (!Set.of("confirmed", "cancelled", "expired").contains(response.path("status").asText())) {
-            throw new HeapyException(ErrorCode.OCR_UNAVAILABLE);
+            throw controlFailure("unexpected_status", response.path("status").asText());
         }
     }
 
@@ -128,11 +132,26 @@ public class AwsOcrGateway implements OcrGateway {
         });
         if (response.statusCode() != 200 || response.functionError() != null
                 || response.payload().asByteArray().length > 524288) {
+            if (control) throw controlFailure("lambda_response", response.functionError());
             throw new HeapyException(ErrorCode.OCR_UNAVAILABLE);
         }
         JsonNode result = OcrJson.MAPPER.readTree(response.payload().asUtf8String());
-        if (!"1.0".equals(result.path("contractVersion").asText())) throw new HeapyException(ErrorCode.OCR_UNAVAILABLE);
+        if (!"1.0".equals(result.path("contractVersion").asText())) {
+            if (control) throw controlFailure("contract_version", null);
+            throw new HeapyException(ErrorCode.OCR_UNAVAILABLE);
+        }
         return result;
+    }
+
+    /** 작업 ID·요청 본문·응답 원문 없이 정리 오류의 분류만 기록한다. @author 김진우 */
+    static HeapyException controlFailure(String reason, String code) {
+        String trace = MDC.get("traceId");
+        String safeTrace = trace != null && trace.matches("[A-Za-z0-9_-]{1,128}") ? trace : "none";
+        String safeCode = code != null && Set.of("JOB_CONFLICT", "INVALID_REQUEST", "STATE_CONFLICT",
+                "INFRASTRUCTURE_FAILED", "RESULT_LIMIT", "EXPIRED", "Unhandled", "Handled",
+                "pending", "processing", "completed", "failed").contains(code) ? code : "unknown";
+        log.error("HEAPY_OCR_CONTROL_FAILED traceId={} reason={} code={}", safeTrace, reason, safeCode);
+        return new HeapyException(ErrorCode.OCR_UNAVAILABLE);
     }
 
     /** 취소 상태를 확정한 뒤 원본·제어 객체의 과거 버전까지 지운다. @author 김진우 */
@@ -165,7 +184,7 @@ public class AwsOcrGateway implements OcrGateway {
     private String text(JsonNode node) { return node.isTextual() ? node.asText() : null; }
 
     private void requireEnabled() {
-        if (!properties.enabled()) throw new HeapyException(ErrorCode.OCR_UNAVAILABLE);
+        if (!properties.enabled()) throw controlFailure("disabled", null);
     }
 
     @PreDestroy
