@@ -31,6 +31,27 @@ public class AuthService {
         } catch (SupabaseAuthClientException exception) {
             throw mapException(exception);
         }
+        return response(session);
+    }
+
+    /** 갱신 실패와 연결 장애를 구분하여 일시 장애로 로그아웃하지 않는다. @author 김진우 */
+    public LoginResponse refresh(String refreshToken) {
+        try {
+            return response(authClient.refresh(refreshToken));
+        } catch (SupabaseAuthClientException exception) {
+            if (exception.getReason() == SupabaseAuthClientException.Reason.INVALID_CREDENTIALS) {
+                throw new HeapyException(ErrorCode.INVALID_ACCESS_TOKEN);
+            }
+            throw mapException(exception);
+        }
+    }
+
+    public void logout(String accessToken) {
+        try { authClient.logout(accessToken); }
+        catch (SupabaseAuthClientException exception) { throw mapException(exception); }
+    }
+
+    private LoginResponse response(SupabaseAuthSession session) {
         if (!session.emailVerified()) {
             throw new HeapyException(ErrorCode.EMAIL_NOT_VERIFIED);
         }

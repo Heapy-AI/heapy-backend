@@ -7,6 +7,7 @@ import com.heapy.user.dto.CompleteProfileRequest;
 import com.heapy.user.dto.UpdateProfileRequest;
 import com.heapy.user.dto.UserProfileResponse;
 import com.heapy.user.service.UserProfileService;
+import com.heapy.user.service.AccountWithdrawalService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,6 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,9 +34,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserProfileService userProfileService;
+    private final AccountWithdrawalService accountWithdrawalService;
 
-    public UserController(UserProfileService userProfileService) {
+    public UserController(UserProfileService userProfileService, AccountWithdrawalService accountWithdrawalService) {
         this.userProfileService = userProfileService;
+        this.accountWithdrawalService = accountWithdrawalService;
+    }
+
+    /** 로그인한 본인의 계정과 연관 정보를 삭제한다. @author 김진우 */
+    @DeleteMapping
+    @Operation(summary = "회원 탈퇴", description = "로그인한 본인의 계정과 사용자 데이터를 삭제합니다. 진행 중인 OCR은 완료 후 재시도합니다.")
+    public ResponseEntity<Void> withdraw(@AuthenticationPrincipal Jwt jwt) {
+        accountWithdrawalService.withdraw(AuthenticatedUser.id(jwt));
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping

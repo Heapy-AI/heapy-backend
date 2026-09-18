@@ -121,6 +121,11 @@ public class OcrRepository {
                 """, this::map);
     }
 
+    /** 종료된 작업도 외부 파일 정리에서 빠뜨리지 않는다. @author 김진우 */
+    public List<Job> forWithdrawal(UUID user) {
+        return jdbc.query(JOB_SELECT + " where j.user_id=? order by j.created_at", this::map, user);
+    }
+
     public List<Job> cleanup() {
         return jdbc.query(JOB_SELECT + " where r.cleanup_pending = true and r.cleanup_retry_at <= current_timestamp order by j.updated_at limit 8", this::map);
     }

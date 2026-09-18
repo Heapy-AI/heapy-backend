@@ -123,7 +123,8 @@ public class GlobalExceptionHandler {
     }
 
     private Object redactRejectedValue(String field, Object value) {
-        if ("password".equalsIgnoreCase(field)) {
+        if ("password".equalsIgnoreCase(field) || "refreshToken".equalsIgnoreCase(field)
+                || "accessToken".equalsIgnoreCase(field)) {
             return "[REDACTED]";
         }
         return value;

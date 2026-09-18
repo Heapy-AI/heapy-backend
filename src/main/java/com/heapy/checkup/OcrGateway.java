@@ -8,4 +8,5 @@ public interface OcrGateway {
     Snapshot read(Job job);
     Snapshot execute(Job job);
     void purge(Job job, String reason);
+    void purgeForWithdrawal(Job job);
 }
