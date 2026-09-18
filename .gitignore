@@ -80,3 +80,4 @@ codex-clipboard-*.png
 
 !/src/test/java/com/heapy/ApplicationStartupTest.java
 !/src/test/java/com/heapy/auth/controller/LogoutControllerTest.java
+!/src/test/java/com/heapy/checkup/AwsOcrGatewayTest.java
