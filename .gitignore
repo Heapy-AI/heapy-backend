@@ -77,3 +77,6 @@ Screenshot*.png
 스크린샷*.png
 codex-clipboard-*.png
 !/src/test/java/com/heapy/auth/client/RestSupabaseAuthClientTest.java
+
+!/src/test/java/com/heapy/ApplicationStartupTest.java
+!/src/test/java/com/heapy/auth/controller/LogoutControllerTest.java
