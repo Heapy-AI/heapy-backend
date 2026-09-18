@@ -132,10 +132,29 @@ def journal_summary(unit_args):
     return result
 
 
+def withdrawal_failures(output):
+    """작성자: 김진우 — 탈퇴 실패 식별자만 반환하고 로그 원문은 공개하지 않는다."""
+    pattern = re.compile(
+        r'HEAPY_WITHDRAWAL_FAILED traceId=([A-Za-z0-9_-]{1,128}) '
+        r'stage=(lock_account|check_processing|check_storage|load_ocr|purge_files|'
+        r'purge_cache|delete_inventory|delete_coin_ledger|delete_business_data|delete_auth_data) '
+        r'exceptionType=([A-Za-z0-9_.$]{1,200}) sqlState=([A-Za-z0-9_-]{1,128}) '
+        r'awsCode=([A-Za-z0-9_-]{1,128})$')
+    entries = []
+    for line in output.splitlines():
+        match = pattern.search(line)
+        if match:
+            entries.append(dict(zip(('traceId', 'stage', 'exceptionType', 'sqlState', 'awsCode'), match.groups())))
+    return entries[-50:]
+
+
 def inspect():
     data = {'container': state(),
             'kernel_window': journal_summary(['-k']),
             'docker_window': journal_summary(['-u', 'docker.service'])}
+    log_code, log_output = run(['docker', 'logs', '--since', '2h', '--tail', '2000',
+                                'heapy-backend'], merge_error=True)
+    data['withdrawal_failures'] = {'query_exit': log_code, 'events': withdrawal_failures(log_output)}
     code, output = run(['docker', 'events', '--since', '2026-09-07T08:21:00Z',
                         '--until', '2026-09-07T08:26:00Z', '--filter', 'type=container',
                         '--format', '{{json .}}'], timeout=8)

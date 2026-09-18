@@ -55,6 +55,28 @@ class AccountWithdrawalServiceTest {
     }
 
     @Test
+    void coinDeletionFailureStopsAccountDeletion() {
+        doThrow(new IllegalStateException("원장 삭제 실패"))
+                .when(jdbc).update("delete from public.coin_ledger where user_id=?", user);
+        assertThrows(IllegalStateException.class, () -> service.withdraw(user));
+        verify(jdbc, never()).update("delete from public.users where user_id=?", user);
+        verify(jdbc, never()).update("delete from auth.users where id=?", user);
+    }
+
+    @Test
+    void coinDeletionPermissionIsLimitedToItsOperation() {
+        service.withdraw(user);
+        var order = inOrder(jdbc);
+        order.verify(jdbc).queryForObject(eq("select set_config('heapy.withdrawal_user', ?, true), "
+                + "set_config('heapy.withdrawal_txid', pg_current_xact_id()::text, true)"),
+                ArgumentMatchers.<RowMapper<String>>any(), eq(user.toString()));
+        order.verify(jdbc).update("delete from public.coin_ledger where user_id=?", user);
+        order.verify(jdbc).queryForObject(eq("select set_config('heapy.withdrawal_user', '', true), "
+                + "set_config('heapy.withdrawal_txid', '', true)"), ArgumentMatchers.<RowMapper<String>>any());
+        order.verify(jdbc).update("delete from public.users where user_id=?", user);
+    }
+
+    @Test
     void processingDocumentDoesNotDeleteAnything() {
         when(jdbc.queryForObject(anyString(), eq(Boolean.class), eq(user))).thenReturn(true);
         assertThrows(HeapyException.class, () -> service.withdraw(user));
